@@ -3,7 +3,11 @@ import { z } from "zod";
 import type { AnalyzeEntryInput, MealEstimate } from "../../shared/models";
 
 const nullableNumberJsonSchema = {
-  anyOf: [{ type: "number" }, { type: "null" }],
+  type: ["number", "null"],
+} as const;
+
+const nullableStringJsonSchema = {
+  type: ["string", "null"],
 } as const;
 
 const macroJsonSchema = {
@@ -60,9 +64,7 @@ const geminiResponseJsonSchema = {
           calories: { type: "number", minimum: 0, maximum: 4000 },
           macros: macroJsonSchema,
           confidence: { ...nullableNumberJsonSchema, minimum: 1, maximum: 99 },
-          notes: {
-            anyOf: [{ type: "string", maxLength: 160 }, { type: "null" }],
-          },
+          notes: { ...nullableStringJsonSchema, maxLength: 160 },
         },
       },
     },
@@ -77,9 +79,7 @@ const geminiResponseJsonSchema = {
         properties: {
           id: { type: "string", minLength: 1, maxLength: 60 },
           label: { type: "string", minLength: 1, maxLength: 120 },
-          helperText: {
-            anyOf: [{ type: "string", maxLength: 160 }, { type: "null" }],
-          },
+          helperText: { ...nullableStringJsonSchema, maxLength: 160 },
           options: {
             type: "array",
             minItems: 2,
@@ -92,9 +92,7 @@ const geminiResponseJsonSchema = {
               properties: {
                 id: { type: "string", minLength: 1, maxLength: 60 },
                 label: { type: "string", minLength: 1, maxLength: 80 },
-                detail: {
-                  anyOf: [{ type: "string", maxLength: 120 }, { type: "null" }],
-                },
+                detail: { ...nullableStringJsonSchema, maxLength: 120 },
               },
             },
           },

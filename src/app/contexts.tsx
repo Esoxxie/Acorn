@@ -81,6 +81,15 @@ const AppDataContext = createContext<AppDataContextValue | null>(null);
 const DEMO_SESSION_KEY = "acorn.demo.session";
 const DEMO_DATA_KEY = "acorn.demo.data";
 
+export function buildProfileBootstrapPatch(user: SessionUser, now: string): Partial<UserProfile> {
+  return {
+    displayName: user.displayName,
+    email: user.email,
+    updatedAt: now,
+    createdAt: now,
+  };
+}
+
 function defaultProfileFromUser(user: SessionUser): UserProfile {
   return {
     displayName: user.displayName,
@@ -238,11 +247,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const now = new Date().toISOString();
       await setDoc(
         doc(db, "users", sessionUser.uid),
-        {
-          ...defaultProfileFromUser(sessionUser),
-          updatedAt: now,
-          createdAt: now,
-        },
+        buildProfileBootstrapPatch(sessionUser, now),
         { merge: true },
       );
     });
@@ -313,6 +318,10 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!user) {
+      setProfile(null);
+      setMeals([]);
+      setSavedFoods([]);
+      setLoading(false);
       return;
     }
 

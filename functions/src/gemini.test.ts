@@ -172,6 +172,15 @@ describe("Gemini meal estimate contract", () => {
     expect(request.config.responseJsonSchema).toBeTruthy();
     expect(request.config.responseJsonSchema.required).toContain("items");
     expect(request.config.responseJsonSchema.properties.items.minItems).toBe(1);
+    expect(request.config.responseJsonSchema.properties.macros.properties.fiber.type).toEqual(["number", "null"]);
+    expect(request.config.responseJsonSchema.properties.items.items.properties.notes.type).toEqual(["string", "null"]);
+    expect(request.config.responseJsonSchema.properties.refinementQuestions.items.properties.helperText.type).toEqual([
+      "string",
+      "null",
+    ]);
+    expect(
+      request.config.responseJsonSchema.properties.refinementQuestions.items.properties.options.items.properties.detail.type,
+    ).toEqual(["string", "null"]);
   });
 
   it("rejects empty Gemini responses", async () => {
