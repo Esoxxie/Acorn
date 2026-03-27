@@ -82,7 +82,7 @@ export default defineConfig({
     globals: true,
     css: true,
     setupFiles: "./src/test/setup.ts",
-    include: ["src/test/**/*.test.ts"],
+    include: ["src/test/**/*.test.ts", "functions/src/**/*.test.ts"],
     exclude: ["src/test/e2e/**"],
   },
 });

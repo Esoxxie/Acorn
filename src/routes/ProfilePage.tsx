@@ -97,7 +97,11 @@ export function ProfilePage() {
           <article className="stat-card">
             <span>Daily</span>
             <strong>{profile?.dailySpendKcal ? formatCalories(profile.dailySpendKcal) : "Incomplete"}</strong>
-            <p>Estimated spend</p>
+            <p>
+              {profile?.dailySpendKcal
+                ? "Estimated spend"
+                : "Add age, sex, height, weight, and activity to calculate TDEE"}
+            </p>
           </article>
           <article className="stat-card">
             <span>Account</span>

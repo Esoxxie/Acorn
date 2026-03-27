@@ -2,11 +2,183 @@ import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 import type { AnalyzeEntryInput, MealEstimate } from "../../shared/models";
 
+const nullableNumberJsonSchema = {
+  anyOf: [{ type: "number" }, { type: "null" }],
+} as const;
+
+const macroJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  propertyOrdering: ["protein", "carbs", "fat", "fiber"],
+  required: ["protein", "carbs", "fat", "fiber"],
+  properties: {
+    protein: { type: "number", minimum: 0, maximum: 500 },
+    carbs: { type: "number", minimum: 0, maximum: 500 },
+    fat: { type: "number", minimum: 0, maximum: 300 },
+    fiber: { ...nullableNumberJsonSchema, minimum: 0, maximum: 200 },
+  },
+} as const;
+
+const geminiResponseJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  propertyOrdering: [
+    "mealTitle",
+    "summary",
+    "calories",
+    "confidence",
+    "assumptions",
+    "macros",
+    "items",
+    "refinementQuestions",
+  ],
+  required: ["mealTitle", "summary", "calories", "confidence", "assumptions", "macros", "items", "refinementQuestions"],
+  properties: {
+    mealTitle: { type: "string", minLength: 1, maxLength: 80 },
+    summary: { type: "string", minLength: 1, maxLength: 220 },
+    calories: { type: "number", minimum: 0, maximum: 6000 },
+    confidence: { type: "number", minimum: 1, maximum: 99 },
+    assumptions: {
+      type: "array",
+      maxItems: 4,
+      items: { type: "string", minLength: 1, maxLength: 160 },
+    },
+    macros: macroJsonSchema,
+    items: {
+      type: "array",
+      minItems: 1,
+      maxItems: 8,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        propertyOrdering: ["id", "name", "portion", "calories", "macros", "confidence", "notes"],
+        required: ["id", "name", "portion", "calories", "macros"],
+        properties: {
+          id: { type: "string", minLength: 1, maxLength: 60 },
+          name: { type: "string", minLength: 1, maxLength: 80 },
+          portion: { type: "string", minLength: 1, maxLength: 80 },
+          calories: { type: "number", minimum: 0, maximum: 4000 },
+          macros: macroJsonSchema,
+          confidence: { ...nullableNumberJsonSchema, minimum: 1, maximum: 99 },
+          notes: {
+            anyOf: [{ type: "string", maxLength: 160 }, { type: "null" }],
+          },
+        },
+      },
+    },
+    refinementQuestions: {
+      type: "array",
+      maxItems: 3,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        propertyOrdering: ["id", "label", "helperText", "options"],
+        required: ["id", "label", "helperText", "options"],
+        properties: {
+          id: { type: "string", minLength: 1, maxLength: 60 },
+          label: { type: "string", minLength: 1, maxLength: 120 },
+          helperText: {
+            anyOf: [{ type: "string", maxLength: 160 }, { type: "null" }],
+          },
+          options: {
+            type: "array",
+            minItems: 2,
+            maxItems: 4,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              propertyOrdering: ["id", "label", "detail"],
+              required: ["id", "label", "detail"],
+              properties: {
+                id: { type: "string", minLength: 1, maxLength: 60 },
+                label: { type: "string", minLength: 1, maxLength: 80 },
+                detail: {
+                  anyOf: [{ type: "string", maxLength: 120 }, { type: "null" }],
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+const rawMacroSchema = z.object({
+  protein: z.number().min(0).max(500).optional(),
+  carbs: z.number().min(0).max(500).optional(),
+  fat: z.number().min(0).max(300).optional(),
+  fiber: z.number().min(0).max(200).nullable().optional(),
+});
+
 const macroSchema = z.object({
   protein: z.number().min(0).max(500),
   carbs: z.number().min(0).max(500),
   fat: z.number().min(0).max(300),
   fiber: z.number().min(0).max(200).nullable().optional(),
+});
+
+const compatibilityEstimateSchema = z.object({
+  mealTitle: z.string().min(1).max(80).optional(),
+  title: z.string().min(1).max(80).optional(),
+  summary: z.string().min(1).max(220).optional(),
+  description: z.string().min(1).max(220).optional(),
+  calories: z.number().min(0).max(6000).optional(),
+  totalCalories: z.number().min(0).max(6000).optional(),
+  confidence: z.number().min(1).max(99),
+  macros: rawMacroSchema.optional(),
+  totalProtein: z.number().min(0).max(500).optional(),
+  totalCarbs: z.number().min(0).max(500).optional(),
+  totalFat: z.number().min(0).max(300).optional(),
+  totalFiber: z.number().min(0).max(200).nullable().optional(),
+  assumptions: z.array(z.string().min(1).max(160)).max(4),
+  items: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(60).optional(),
+        name: z.string().min(1).max(80).optional(),
+        title: z.string().min(1).max(80).optional(),
+        portion: z.string().min(1).max(80).optional(),
+        serving: z.string().min(1).max(80).optional(),
+        calories: z.number().min(0).max(4000).optional(),
+        kcal: z.number().min(0).max(4000).optional(),
+        macros: rawMacroSchema.optional(),
+        protein: z.number().min(0).max(500).optional(),
+        carbs: z.number().min(0).max(500).optional(),
+        fat: z.number().min(0).max(300).optional(),
+        fiber: z.number().min(0).max(200).nullable().optional(),
+        confidence: z.number().min(1).max(99).nullable().optional(),
+        notes: z.string().max(160).nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(8),
+  refinementQuestions: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(60).optional(),
+        label: z.string().min(1).max(120).optional(),
+        question: z.string().min(1).max(120).optional(),
+        helperText: z.string().max(160).nullable().optional(),
+        detail: z.string().max(160).nullable().optional(),
+        options: z
+          .array(
+            z.union([
+              z.string().min(1).max(80),
+              z.object({
+                id: z.string().min(1).max(60).optional(),
+                label: z.string().min(1).max(80).optional(),
+                text: z.string().min(1).max(80).optional(),
+                value: z.string().min(1).max(80).optional(),
+                detail: z.string().max(120).nullable().optional(),
+              }),
+            ]),
+          )
+          .min(2)
+          .max(4),
+      }),
+    )
+    .max(3),
 });
 
 const estimateSchema = z.object({
@@ -61,8 +233,146 @@ function slugify(value: string, index: number) {
   return slug || `item-${index + 1}`;
 }
 
-function normalizeEstimate(raw: unknown): MealEstimate {
-  const parsed = estimateSchema.parse(raw);
+function pickFirstString(...values: Array<string | null | undefined>): string | undefined {
+  return values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim();
+}
+
+function pickMeaningfulNumber(primary: number | undefined, fallback: number): number {
+  if (typeof primary === "number" && Number.isFinite(primary) && (primary > 0 || fallback <= 0)) {
+    return primary;
+  }
+
+  return fallback;
+}
+
+function normalizeMacros(raw: {
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  fiber?: number | null;
+}) {
+  return {
+    protein: raw.protein ?? 0,
+    carbs: raw.carbs ?? 0,
+    fat: raw.fat ?? 0,
+    fiber: raw.fiber ?? null,
+  };
+}
+
+function parseGeminiJsonResponse(rawText: string): unknown {
+  try {
+    return JSON.parse(rawText);
+  } catch (error) {
+    throw new Error(
+      `Gemini returned invalid JSON: ${error instanceof Error ? error.message : "unknown parse error"}.`,
+    );
+  }
+}
+
+function coerceCompatibilityEstimate(raw: unknown): z.infer<typeof estimateSchema> {
+  const parsed = compatibilityEstimateSchema.parse(raw);
+  const mealTitle = pickFirstString(parsed.mealTitle, parsed.title);
+
+  if (!mealTitle) {
+    throw new Error("Gemini response is missing mealTitle.");
+  }
+
+  const summary = pickFirstString(parsed.summary, parsed.description);
+  if (!summary) {
+    throw new Error("Gemini response is missing summary.");
+  }
+
+  const items = parsed.items.map((item, index) => {
+    const name = pickFirstString(item.name, item.title);
+    if (!name) {
+      throw new Error(`Gemini response item ${index + 1} is missing name.`);
+    }
+
+    const portion = pickFirstString(item.portion, item.serving);
+    if (!portion) {
+      throw new Error(`Gemini response item ${index + 1} is missing portion.`);
+    }
+
+    const calories = item.calories ?? item.kcal;
+    if (typeof calories !== "number") {
+      throw new Error(`Gemini response item ${index + 1} is missing calories.`);
+    }
+
+    return {
+      id: item.id || slugify(name, index),
+      name,
+      portion,
+      calories,
+      macros: normalizeMacros({
+        protein: item.macros?.protein ?? item.protein,
+        carbs: item.macros?.carbs ?? item.carbs,
+        fat: item.macros?.fat ?? item.fat,
+        fiber: item.macros?.fiber ?? item.fiber,
+      }),
+      confidence: item.confidence ?? null,
+      notes: item.notes ?? null,
+    };
+  });
+
+  const fallbackCalories = items.reduce((total, item) => total + item.calories, 0);
+  const fallbackMacros = normalizeMacros({
+    protein: items.reduce((total, item) => total + item.macros.protein, 0),
+    carbs: items.reduce((total, item) => total + item.macros.carbs, 0),
+    fat: items.reduce((total, item) => total + item.macros.fat, 0),
+    fiber: items.reduce((total, item) => total + (item.macros.fiber ?? 0), 0),
+  });
+  const caloriesSource = parsed.calories ?? parsed.totalCalories;
+  if (typeof caloriesSource !== "number" && fallbackCalories <= 0) {
+    throw new Error("Gemini response is missing calories.");
+  }
+  const calories = pickMeaningfulNumber(caloriesSource, fallbackCalories);
+  const macros = normalizeMacros({
+    protein: pickMeaningfulNumber(parsed.macros?.protein ?? parsed.totalProtein, fallbackMacros.protein),
+    carbs: pickMeaningfulNumber(parsed.macros?.carbs ?? parsed.totalCarbs, fallbackMacros.carbs),
+    fat: pickMeaningfulNumber(parsed.macros?.fat ?? parsed.totalFat, fallbackMacros.fat),
+    fiber: pickMeaningfulNumber(parsed.macros?.fiber ?? parsed.totalFiber ?? undefined, fallbackMacros.fiber ?? 0),
+  });
+  const refinementQuestions =
+    parsed.refinementQuestions.map((question, questionIndex) => {
+      const label = pickFirstString(question.label, question.question) ?? `Question ${questionIndex + 1}`;
+      return {
+        id: question.id || slugify(label, questionIndex),
+        label,
+        helperText: question.helperText ?? question.detail ?? null,
+        options: (question.options ?? []).map((option, optionIndex) => {
+          if (typeof option === "string") {
+            return {
+              id: slugify(option, optionIndex),
+              label: option,
+              detail: null,
+            };
+          }
+
+          const optionLabel = pickFirstString(option.label, option.text, option.value) ?? `Option ${optionIndex + 1}`;
+          return {
+            id: option.id || slugify(optionLabel, optionIndex),
+            label: optionLabel,
+            detail: option.detail ?? null,
+          };
+        }),
+      };
+    });
+
+  return estimateSchema.parse({
+    mealTitle,
+    summary,
+    calories,
+    confidence: parsed.confidence,
+    assumptions: parsed.assumptions,
+    macros,
+    items,
+    refinementQuestions,
+  });
+}
+
+export function normalizeEstimate(raw: unknown): MealEstimate {
+  const canonicalResult = estimateSchema.safeParse(raw);
+  const parsed = canonicalResult.success ? canonicalResult.data : coerceCompatibilityEstimate(raw);
 
   return {
     ...parsed,
@@ -88,7 +398,7 @@ function normalizeEstimate(raw: unknown): MealEstimate {
   };
 }
 
-function buildPrompt(input: AnalyzeEntryInput) {
+export function buildPrompt(input: AnalyzeEntryInput) {
   const modeInstructions =
     input.mode === "photo"
       ? "Estimate nutrition from the food photo. Respect any user-provided context if it reasonably clarifies the image."
@@ -115,13 +425,16 @@ function buildPrompt(input: AnalyzeEntryInput) {
     contextBlock,
     refinementBlock,
     "Return JSON only with no markdown fences.",
-    "Keep the meal title short and natural.",
-    "Summary should be 1 concise sentence.",
-    "Use realistic calories and macros in grams.",
-    "Assumptions should be brief, honest, and specific.",
-    "If there is meaningful uncertainty, generate up to 3 refinementQuestions that can be answered with 2 to 4 tap-friendly options each.",
-    "If this is already a refinement request, update the estimate and only include leftover refinement questions if they still matter.",
-    "Never leave items or macros empty if you can estimate them reasonably.",
+    "Return exactly these top-level fields and do not rename them: mealTitle, summary, calories, confidence, assumptions, macros, items, refinementQuestions.",
+    "mealTitle must be short and natural. summary must be exactly 1 concise sentence.",
+    "macros must always include protein, carbs, fat, and fiber. Use grams for macros.",
+    "Every item must include id, name, portion, calories, and macros.",
+    "Use stable slug-like ids such as grilled-chicken, extra-sauce, portion-large, or dressing-on-side.",
+    "Assumptions must be brief, honest, and specific. Use an empty array when there are no important assumptions.",
+    "If there is meaningful uncertainty that would materially change calories or macros, generate 1 to 3 refinementQuestions with 2 to 4 tap-friendly options each.",
+    "If there is not meaningful uncertainty, return refinementQuestions as an empty array.",
+    "If this is already a refinement request, update the estimate using the selected answers and only keep leftover refinementQuestions if they still matter.",
+    "Do not emit alternate field names like title, description, totalCalories, serving, kcal, question, text, or value.",
   ].join("\n");
 }
 
@@ -153,6 +466,7 @@ export async function runGeminiMealAnalysis(
     config: {
       temperature: 0.35,
       responseMimeType: "application/json",
+      responseJsonSchema: geminiResponseJsonSchema,
     },
   });
 
@@ -160,5 +474,16 @@ export async function runGeminiMealAnalysis(
     throw new Error("Gemini returned an empty response.");
   }
 
-  return normalizeEstimate(JSON.parse(response.text));
+  try {
+    return normalizeEstimate(parseGeminiJsonResponse(response.text));
+  } catch (error) {
+    console.error("Gemini meal analysis response validation failed.", {
+      model: config.model,
+      mode: input.mode,
+      hasPriorEstimate: Boolean(input.priorEstimate),
+      responsePreview: response.text.slice(0, 500),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }

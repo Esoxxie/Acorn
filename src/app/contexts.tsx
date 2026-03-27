@@ -30,6 +30,7 @@ import { createSeededDemoData } from "../lib/demo-data";
 import {
   auth,
   db,
+  getAuthErrorMessage,
   startGoogleSignIn,
 } from "../lib/firebase";
 import { deleteMealImages, uploadMealImages } from "../lib/storage";
@@ -46,6 +47,7 @@ type SessionUser = {
 type AuthContextValue = {
   user: SessionUser | null;
   loading: boolean;
+  authError: string | null;
   signIn: () => Promise<void>;
   signOutUser: () => Promise<void>;
   signInDemo: () => Promise<void>;
@@ -202,6 +204,7 @@ function normalizeProfile(profile: UserProfile, user: SessionUser): UserProfile 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     const demoUser = loadDemoUser();
@@ -226,6 +229,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         : null;
       setUser(sessionUser);
       setLoading(false);
+      setAuthError(null);
 
       if (!sessionUser) {
         return;
@@ -263,7 +267,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
           return;
         }
 
-        await startGoogleSignIn();
+        setAuthError(null);
+
+        try {
+          await startGoogleSignIn();
+        } catch (error) {
+          setAuthError(getAuthErrorMessage(error));
+        }
       },
       signOutUser: async () => {
         if (user?.isDemo || appEnv.usingDemoConfig) {
@@ -283,10 +293,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
         };
         saveDemoUser(demoUser);
         setUser(demoUser);
+        setAuthError(null);
       },
       isEmulatorMode: appEnv.useEmulators,
+      authError,
     }),
-    [loading, user],
+    [authError, loading, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

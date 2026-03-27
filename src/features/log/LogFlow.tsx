@@ -1,5 +1,5 @@
 import { Camera, Star, Wand2 } from "lucide-react";
-import { createContext, useContext, useEffect, useState, type PropsWithChildren } from "react";
+import { createContext, useContext, useEffect, useState, type ChangeEvent, type PropsWithChildren } from "react";
 import type { MealEstimate } from "../../../shared/models";
 import { useAppData } from "../../app/contexts";
 import { BottomSheet } from "../../components/BottomSheet";
@@ -34,6 +34,17 @@ async function getEstimate(input: {
 }
 
 function getErrorMessage(error: unknown): string {
+  if (typeof error === "object" && error !== null) {
+    const customData =
+      "customData" in error && typeof error.customData === "object" && error.customData !== null
+        ? (error.customData as { message?: unknown })
+        : null;
+
+    if (typeof customData?.message === "string" && customData.message.trim().length > 0) {
+      return customData.message;
+    }
+  }
+
   if (error instanceof Error) {
     return error.message;
   }
@@ -171,6 +182,29 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
     }
   }
 
+  async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const nextFile = event.target.files?.[0] ?? null;
+
+    releasePreparedImageAssets(preparedAssets);
+    setPreparedAssets(null);
+    setFile(nextFile);
+    setError(null);
+
+    if (!nextFile) {
+      return;
+    }
+
+    try {
+      const assets = await prepareImageAssets(nextFile);
+      setPreparedAssets(assets);
+    } catch (caughtError) {
+      setFile(null);
+      setError(getErrorMessage(caughtError));
+    } finally {
+      event.target.value = "";
+    }
+  }
+
   function renderComposer() {
     return (
       <div className="stack">
@@ -187,13 +221,7 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
             accept="image/*"
             capture="environment"
             hidden
-            onChange={(event) => {
-              const nextFile = event.target.files?.[0] ?? null;
-              releasePreparedImageAssets(preparedAssets);
-              setPreparedAssets(null);
-              setFile(nextFile);
-              setError(null);
-            }}
+            onChange={(event) => void handlePhotoChange(event)}
             type="file"
           />
         </label>

@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import {
+  type AuthError,
   GoogleAuthProvider,
   connectAuthEmulator,
   getAuth,
@@ -55,6 +56,15 @@ export { auth, firestore as db, functions, googleProvider, storage };
 
 export const analyzeEntry = httpsCallable<AnalyzeEntryInput, MealEstimate>(functions, "analyzeEntry");
 
+function isIosBrowser(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const userAgent = window.navigator.userAgent;
+  return /iPad|iPhone|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && "ontouchend" in document);
+}
+
 function prefersRedirect(): boolean {
   if (typeof window === "undefined") {
     return false;
@@ -64,7 +74,9 @@ function prefersRedirect(): boolean {
     window.matchMedia("(display-mode: standalone)").matches ||
     ("standalone" in navigator && Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
 
-  return standalone || window.matchMedia("(max-width: 820px)").matches;
+  // Mobile popups are usually fine inside a normal browser tab, but installed PWAs
+  // and iOS are still more reliable with a full-page redirect.
+  return standalone || isIosBrowser();
 }
 
 export async function startGoogleSignIn() {
@@ -78,4 +90,27 @@ export async function startGoogleSignIn() {
 
 export async function startDemoSignIn() {
   await signInAnonymously(auth);
+}
+
+export function getAuthErrorMessage(error: unknown): string {
+  const code = typeof error === "object" && error !== null && "code" in error ? (error as AuthError).code : null;
+
+  switch (code) {
+    case "auth/unauthorized-domain": {
+      const host = typeof window === "undefined" ? "this host" : window.location.hostname;
+      return `Google sign-in is blocked for ${host}. Add that host in Firebase Authentication > Settings > Authorized domains, then try again.`;
+    }
+    case "auth/popup-blocked":
+      return "The sign-in popup was blocked by the browser. Allow popups for this site and try again.";
+    case "auth/popup-closed-by-user":
+      return "The sign-in popup closed before login finished. Try again and keep the popup open.";
+    case "auth/network-request-failed":
+      return "The phone could not reach Firebase. Make sure the phone and this computer are on the same network and try again.";
+    default:
+      if (error instanceof Error && error.message) {
+        return error.message;
+      }
+
+      return "Sign-in failed. Please try again.";
+  }
 }

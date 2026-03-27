@@ -108,6 +108,28 @@ a {
   text-align: center;
 }
 
+.hero-card--auth {
+  width: min(100%, 460px);
+  padding: 36px 30px 30px;
+  gap: 22px;
+}
+
+.hero-card--auth h1 {
+  max-width: 10ch;
+  text-wrap: balance;
+  font-size: clamp(2.6rem, 9vw, 4.4rem);
+}
+
+.hero-card--auth .hero-card__actions {
+  width: 100%;
+  justify-content: center;
+}
+
+.hero-card--auth .primary-button,
+.hero-card--auth .secondary-button {
+  min-width: min(100%, 240px);
+}
+
 .hero-card--loading {
   min-height: 220px;
   place-content: center;
@@ -625,5 +647,9 @@ a {
   .sheet {
     width: min(560px, 100%);
     margin-left: auto;
+  }
+
+  .hero-card--auth {
+    padding: 40px 34px 34px;
   }
 }

@@ -9,6 +9,18 @@ export function TodayPage() {
   const todayCalories = todaysMeals.reduce((sum, meal) => sum + meal.calories, 0);
   const dailySpend = profile?.dailySpendKcal ?? 0;
   const progressPercent = dailySpend ? Math.min(100, Math.round((todayCalories / dailySpend) * 1000) / 10) : 0;
+  const missingProfileFields = [
+    !profile?.age ? "age" : null,
+    !profile?.sex ? "sex" : null,
+    !profile?.heightCm ? "height" : null,
+    !profile?.weightKg ? "weight" : null,
+    !profile?.activityLevel ? "activity level" : null,
+  ].filter(Boolean);
+  const dailyStatus = dailySpend
+    ? `${formatPercent(progressPercent)} covered`
+    : missingProfileFields.length
+      ? `Missing ${missingProfileFields.join(", ")} for TDEE`
+      : "Complete your profile to calculate TDEE";
 
   return (
     <div className="page-stack">
@@ -21,7 +33,7 @@ export function TodayPage() {
         <article className="stat-card">
           <span>Daily</span>
           <strong>{dailySpend ? formatCalories(dailySpend) : "Set profile"}</strong>
-          <p>{dailySpend ? `${formatPercent(progressPercent)} covered` : "Add profile data for TDEE"}</p>
+          <p>{dailyStatus}</p>
         </article>
       </section>
 
