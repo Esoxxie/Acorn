@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Acorn Logo Optionen</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f0d0b;
+      color: #f0e8df;
+      padding: 32px 20px 60px;
+      min-height: 100vh;
+    }
+    h1 { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #8a7a6e; margin-bottom: 36px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+      max-width: 480px;
+    }
+    .card {
+      background: #1c1814;
+      border-radius: 20px;
+      overflow: hidden;
+    }
+    .card:last-child { grid-column: 1 / -1; }
+    .logo-wrap {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 28px;
+      gap: 20px;
+    }
+    .logo-wrap img {
+      width: 96px;
+      height: 96px;
+      border-radius: 22px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    .logo-wrap img.small {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+    }
+    .info {
+      padding: 0 20px 22px;
+    }
+    .label {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #6a5e54;
+      margin-bottom: 4px;
+    }
+    .name {
+      font-size: 16px;
+      font-weight: 600;
+      color: #f0e8df;
+      margin-bottom: 4px;
+    }
+    .desc {
+      font-size: 12px;
+      color: #7a6e64;
+      line-height: 1.5;
+    }
+
+    /* Context previews */
+    .contexts {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 20px;
+      background: #151210;
+      border-top: 1px solid #2a2420;
+    }
+    .ctx-label { font-size: 10px; color: #4a4038; letter-spacing: 0.06em; text-transform: uppercase; margin-right: 4px; }
+
+    /* Dark/light bg swatches */
+    .swatch {
+      width: 48px; height: 48px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .swatch.light { background: #f5efe7; }
+    .swatch.mid { background: #3a2e26; }
+    .swatch img { width: 36px; height: 36px; border-radius: 8px; }
+
+    /* Current badge -->
+    .current {
+      display: inline-block;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: #2a3e2e;
+      color: #6aaa78;
+      border-radius: 4px;
+      padding: 2px 7px;
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Acorn — Logo Optionen</h1>
+
+  <div class="grid">
+
+    <!-- Current -->
+    <div class="card">
+      <div class="logo-wrap">
+        <img src="../favicon.svg" alt="Current"/>
+        <img src="../favicon.svg" alt="Current small" class="small"/>
+      </div>
+      <div class="info">
+        <div class="current">Aktuell</div>
+        <div class="name">Original</div>
+        <div class="desc">Braun/Grün, harter Rand, kein Gradient</div>
+      </div>
+      <div class="contexts">
+        <span class="ctx-label">Auf</span>
+        <div class="swatch light"><img src="../favicon.svg"/></div>
+        <div class="swatch mid"><img src="../favicon.svg"/></div>
+      </div>
+    </div>
+
+    <!-- A -->
+    <div class="card">
+      <div class="logo-wrap">
+        <img src="option-a-gradient.svg" alt="Option A"/>
+        <img src="option-a-gradient.svg" alt="Option A small" class="small"/>
+      </div>
+      <div class="info">
+        <div class="label">Option A</div>
+        <div class="name">Gradient Modern</div>
+        <div class="desc">Warme Verläufe, weiche Lichter, keine Konturen</div>
+      </div>
+      <div class="contexts">
+        <span class="ctx-label">Auf</span>
+        <div class="swatch light"><img src="option-a-gradient.svg"/></div>
+        <div class="swatch mid"><img src="option-a-gradient.svg"/></div>
+      </div>
+    </div>
+
+    <!-- B -->
+    <div class="card">
+      <div class="logo-wrap">
+        <img src="option-b-dark.svg" alt="Option B"/>
+        <img src="option-b-dark.svg" alt="Option B small" class="small"/>
+      </div>
+      <div class="info">
+        <div class="label">Option B</div>
+        <div class="name">Dark Premium</div>
+        <div class="desc">Dunkler Hintergrund, goldene Eichel, warmer Glow</div>
+      </div>
+      <div class="contexts">
+        <span class="ctx-label">Auf</span>
+        <div class="swatch light"><img src="option-b-dark.svg"/></div>
+        <div class="swatch mid"><img src="option-b-dark.svg"/></div>
+      </div>
+    </div>
+
+    <!-- C -->
+    <div class="card">
+      <div class="logo-wrap">
+        <img src="option-c-round.svg" alt="Option C"/>
+        <img src="option-c-round.svg" alt="Option C small" class="small"/>
+      </div>
+      <div class="info">
+        <div class="label">Option C</div>
+        <div class="name">Round Playful</div>
+        <div class="desc">Rundere, dickere Eichel, Kreisform, kleines Blatt</div>
+      </div>
+      <div class="contexts">
+        <span class="ctx-label">Auf</span>
+        <div class="swatch light"><img src="option-c-round.svg"/></div>
+        <div class="swatch mid"><img src="option-c-round.svg"/></div>
+      </div>
+    </div>
+
+    <!-- D -->
+    <div class="card">
+      <div class="logo-wrap">
+        <img src="option-d-bold.svg" alt="Option D"/>
+        <img src="option-d-bold.svg" alt="Option D small" class="small"/>
+      </div>
+      <div class="info">
+        <div class="label">Option D</div>
+        <div class="name">Bold Stamp</div>
+        <div class="desc">Markenbraun als Hintergrund, cremefarbene Silhouette</div>
+      </div>
+      <div class="contexts">
+        <span class="ctx-label">Auf</span>
+        <div class="swatch light"><img src="option-d-bold.svg"/></div>
+        <div class="swatch mid"><img src="option-d-bold.svg"/></div>
+      </div>
+    </div>
+
+    <!-- E: full width -->
+    <div class="card">
+      <div class="logo-wrap">
+        <img src="option-e-minimal.svg" alt="Option E"/>
+        <img src="option-e-minimal.svg" alt="Option E small" class="small"/>
+      </div>
+      <div class="info">
+        <div class="label">Option E</div>
+        <div class="name">Minimal Line</div>
+        <div class="desc">Dunkelgrün-Hintergrund, Kontur-Eichel, warme Linien — abstrakt</div>
+      </div>
+      <div class="contexts">
+        <span class="ctx-label">Auf</span>
+        <div class="swatch light"><img src="option-e-minimal.svg"/></div>
+        <div class="swatch mid"><img src="option-e-minimal.svg"/></div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

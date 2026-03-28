@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- D: Bold Stamp — brand brown bg, cream acorn silhouette, high contrast -->
+  <rect width="512" height="512" rx="112" fill="#7B3A1A"/>
+  <!-- Subtle texture overlay -->
+  <rect width="512" height="512" rx="112" fill="url(#dTex)" opacity="0.06"/>
+  <defs>
+    <radialGradient id="dTex" cx="50%" cy="0%" r="80%">
+      <stop offset="0%" stop-color="#FFF"/>
+      <stop offset="100%" stop-color="#000"/>
+    </radialGradient>
+  </defs>
+  <!-- Cap — cream/light green -->
+  <path d="M186 136 C204 108 230 95 256 95 C282 95 308 108 326 136 L326 192 Q296 208 256 210 Q216 208 186 192 Z" fill="#2C4C30"/>
+  <!-- Body — cream -->
+  <path d="M163 214c0-15 12-27 27-27h132c15 0 27 12 27 27 0 87-33 158-80 206-23 23-49 35-66 35s-43-12-66-35c-47-48-80-119-80-206Z" fill="#F5EBDD"/>
+  <!-- Subtle body shading -->
+  <path d="M163 214c0-15 12-27 27-27h132c15 0 27 12 27 27 0 87-33 158-80 206-23 23-49 35-66 35s-43-12-66-35c-47-48-80-119-80-206Z" fill="url(#dShade)"/>
+  <defs>
+    <linearGradient id="dShade" x1="163" y1="214" x2="349" y2="455" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="rgba(0,0,0,0)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0.12)"/>
+    </linearGradient>
+  </defs>
+  <!-- Divider line between cap and body -->
+  <path d="M186 192 Q216 208 256 210 Q296 208 326 192" stroke="#7B3A1A" stroke-width="8" stroke-linecap="round" fill="none"/>
+</svg>

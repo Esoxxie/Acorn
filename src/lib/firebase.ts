@@ -6,7 +6,6 @@ import {
   getAuth,
   signInAnonymously,
   signInWithPopup,
-  signInWithRedirect,
 } from "firebase/auth";
 import {
   type Firestore,
@@ -56,35 +55,7 @@ export { auth, firestore as db, functions, googleProvider, storage };
 
 export const analyzeEntry = httpsCallable<AnalyzeEntryInput, MealEstimate>(functions, "analyzeEntry");
 
-function isIosBrowser(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  const userAgent = window.navigator.userAgent;
-  return /iPad|iPhone|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && "ontouchend" in document);
-}
-
-function prefersRedirect(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  const standalone =
-    window.matchMedia("(display-mode: standalone)").matches ||
-    ("standalone" in navigator && Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
-
-  // Mobile popups are usually fine inside a normal browser tab, but installed PWAs
-  // and iOS are still more reliable with a full-page redirect.
-  return standalone || isIosBrowser();
-}
-
 export async function startGoogleSignIn() {
-  if (prefersRedirect()) {
-    await signInWithRedirect(auth, googleProvider);
-    return;
-  }
-
   await signInWithPopup(auth, googleProvider);
 }
 

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- C: Round Playful — rounder/fatter body, circle badge, friendlier feel -->
+  <defs>
+    <linearGradient id="cBody" x1="256" y1="190" x2="256" y2="460" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E08C40"/>
+      <stop offset="100%" stop-color="#8C4016"/>
+    </linearGradient>
+    <linearGradient id="cCap" x1="256" y1="88" x2="256" y2="205" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#78B05E"/>
+      <stop offset="100%" stop-color="#3E6432"/>
+    </linearGradient>
+    <radialGradient id="cBg" cx="45%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#FFFAF3"/>
+      <stop offset="100%" stop-color="#F2E4CE"/>
+    </radialGradient>
+  </defs>
+  <!-- Circle background -->
+  <circle cx="256" cy="256" r="256" fill="url(#cBg)"/>
+  <!-- Wider cap -->
+  <path d="M162 140 C186 104 220 88 256 88 C292 88 326 104 350 140 L350 196 Q308 216 256 218 Q204 216 162 196 Z" fill="url(#cCap)"/>
+  <!-- Rounder, fatter body -->
+  <path d="M162 200 C145 248 138 310 155 366 C172 418 212 458 256 458 C300 458 340 418 357 366 C374 310 367 248 350 200 Q308 190 256 190 Q204 190 162 200 Z" fill="url(#cBody)"/>
+  <!-- Highlight -->
+  <ellipse cx="210" cy="298" rx="16" ry="52" fill="rgba(255,255,255,0.16)" transform="rotate(-14 210 298)"/>
+  <!-- Small leaf on cap -->
+  <path d="M256 88 C258 70 268 58 278 62 C272 72 264 80 256 88 Z" fill="#5B8A4A"/>
+</svg>

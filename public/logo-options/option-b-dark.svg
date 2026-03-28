@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- B: Dark Premium — dark bg, golden acorn, warm glow -->
+  <defs>
+    <linearGradient id="bBody" x1="256" y1="187" x2="256" y2="455" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E2A85A"/>
+      <stop offset="100%" stop-color="#A85C1E"/>
+    </linearGradient>
+    <linearGradient id="bCap" x1="256" y1="90" x2="256" y2="215" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3E6244"/>
+      <stop offset="100%" stop-color="#1C3020"/>
+    </linearGradient>
+    <radialGradient id="bGlow" cx="50%" cy="58%" r="45%">
+      <stop offset="0%" stop-color="#7A3A10" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#7A3A10" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#171310"/>
+  <rect width="512" height="512" rx="112" fill="url(#bGlow)"/>
+  <!-- Cap -->
+  <path d="M186 136 C204 108 230 95 256 95 C282 95 308 108 326 136 L326 192 Q296 208 256 210 Q216 208 186 192 Z" fill="url(#bCap)"/>
+  <!-- Body -->
+  <path d="M163 214c0-15 12-27 27-27h132c15 0 27 12 27 27 0 87-33 158-80 206-23 23-49 35-66 35s-43-12-66-35c-47-48-80-119-80-206Z" fill="url(#bBody)"/>
+  <!-- Shine -->
+  <ellipse cx="213" cy="268" rx="13" ry="44" fill="rgba(255,220,150,0.14)" transform="rotate(-18 213 268)"/>
+  <!-- Cap shine -->
+  <ellipse cx="229" cy="144" rx="21" ry="11" fill="rgba(255,255,255,0.10)" transform="rotate(-8 229 144)"/>
+</svg>
