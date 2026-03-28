@@ -90,20 +90,20 @@ export function getConfidenceDetails(confidence: number): ConfidenceDetails {
     return {
       label: "Hohe Sicherheit",
       tone: "high",
-      hint: "Die Schaetzung ist fuer einen schnellen Eintrag verlaesslich genug.",
+      hint: "Die Schätzung ist für einen schnellen Eintrag verlässlich genug.",
     };
   }
 
   if (confidence >= 70) {
     return {
-      label: "Solide Schaetzung",
+      label: "Solide Schätzung",
       tone: "solid",
-      hint: "Gut genug fuer das taegliche Tracking.",
+      hint: "Gut genug für das tägliche Tracking.",
     };
   }
 
   return {
-    label: "Grobe Schaetzung",
+    label: "Grobe Schätzung",
     tone: "rough",
     hint: "Zum Protokollieren brauchbar, bei Bedarf aber besser verfeinern.",
   };

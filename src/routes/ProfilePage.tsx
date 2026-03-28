@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ActivityLevel, BiologicalSex, ThemePreference, UnitSystem, UserProfile } from "../../shared/models";
 import { useAppData, useAuth } from "../app/contexts";
 import { uiCopy } from "../lib/copy";
@@ -50,21 +50,13 @@ function toFormState(profile: UserProfile | null): ProfileFormState {
 export function ProfilePage() {
   const { profile, saveProfile, loading, syncError } = useAppData();
   const { signOutUser, user } = useAuth();
-  const { checking, updateAvailable, message, checkForUpdate, applyUpdate } = usePwaUpdateState();
+  const { checking, updateAvailable, checkForUpdate, applyUpdate } = usePwaUpdateState();
   const [formState, setFormState] = useState<ProfileFormState>(toFormState(profile));
   const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
     setFormState(toFormState(profile));
   }, [profile]);
-
-  const updateStatus = useMemo(() => {
-    if (updateAvailable) {
-      return uiCopy.profile.updateAvailable;
-    }
-
-    return message ?? uiCopy.profile.updateCurrent;
-  }, [message, updateAvailable]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -167,22 +159,17 @@ export function ProfilePage() {
       <section className="section-card">
         <div className="section-card__header">
           <h2>{uiCopy.profile.app}</h2>
-          <p>{uiCopy.profile.updateHint}</p>
-        </div>
-        <div className="stat-card">
-          <span>{uiCopy.profile.updates}</span>
-          <strong>{updateStatus}</strong>
-          <p>{updateAvailable ? uiCopy.profile.updateReloadHint : uiCopy.profile.updateManualHint}</p>
         </div>
         <div className="sheet__actions">
-          <button className="secondary-button" disabled={checking} onClick={() => void checkForUpdate()} type="button">
-            {checking ? uiCopy.profile.checkingUpdates : uiCopy.profile.checkUpdates}
-          </button>
           {updateAvailable ? (
             <button className="primary-button" onClick={() => void applyUpdate()} type="button">
               {uiCopy.profile.reload}
             </button>
-          ) : null}
+          ) : (
+            <button className="secondary-button" disabled={checking} onClick={() => void checkForUpdate()} type="button">
+              {checking ? uiCopy.profile.checkingUpdates : uiCopy.profile.checkUpdates}
+            </button>
+          )}
         </div>
       </section>
 

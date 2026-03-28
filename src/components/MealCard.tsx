@@ -1,10 +1,9 @@
 import { Heart, Minus, PencilLine, Plus, Repeat2, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { MealRecord } from "../../shared/models";
 import { formatCalories, formatMacro, formatTimeLabel } from "../lib/format";
 import { uiCopy } from "../lib/copy";
 import { getFoodIcon, getFoodIconTone } from "../lib/food-icons";
-import { getConfidenceDetails } from "../lib/nutrition-visuals";
 import { resolveStorageUrl } from "../lib/storage";
 import { ConfidencePill } from "./NutritionVisuals";
 import "../styles/meal-surfaces.css";
@@ -106,7 +105,6 @@ export function MealCard({
 }: MealCardProps) {
   const canDecrement = (meal.servings ?? 1) > 1;
   const percentWidth = Math.max(0, Math.min(100, meal.percentOfDailySpend));
-  const confidenceDetails = useMemo(() => getConfidenceDetails(meal.confidence), [meal.confidence]);
   const portionLabel = getPortionLabel(meal);
 
   return (
@@ -156,22 +154,25 @@ export function MealCard({
           onClick={() => void onFavorite(meal)}
           type="button"
         >
-          <Heart fill={meal.favorite ? "currentColor" : "none"} size={15} />
-          {meal.favorite ? uiCopy.mealCard.favorited : uiCopy.mealCard.favorite}
+          <Heart fill={meal.favorite ? "currentColor" : "none"} size={16} />
         </button>
         <span aria-hidden="true" className="meal-card__action-divider" />
         <button
+          aria-label={uiCopy.mealCard.edit}
           className="meal-card__action-button"
           onClick={() => onEdit?.(meal)}
           type="button"
         >
-          <PencilLine size={15} />
-          {uiCopy.mealCard.edit}
+          <PencilLine size={16} />
         </button>
         <span aria-hidden="true" className="meal-card__action-divider" />
-        <button className="meal-card__action-button meal-card__action-button--danger" onClick={() => void onDelete(meal)} type="button">
-          <Trash2 size={15} />
-          {uiCopy.mealCard.delete}
+        <button
+          aria-label={uiCopy.mealCard.delete}
+          className="meal-card__action-button meal-card__action-button--danger"
+          onClick={() => void onDelete(meal)}
+          type="button"
+        >
+          <Trash2 size={16} />
         </button>
       </div>
 
@@ -207,10 +208,6 @@ export function MealCard({
           </div>
 
           <div className="meal-card__detail-row meal-card__detail-row--assessment">
-            <div>
-              <span className="meal-card__detail-label">{uiCopy.mealCard.assessment}</span>
-              <strong className="meal-card__detail-value">{confidenceDetails.hint}</strong>
-            </div>
             <ConfidencePill confidence={meal.confidence} />
           </div>
 

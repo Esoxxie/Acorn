@@ -30,9 +30,9 @@ export function TodayPage() {
   const missingProfileFields = [
     !profile?.age ? "Alter" : null,
     !profile?.sex ? "Geschlecht" : null,
-    !profile?.heightCm ? "Groesse" : null,
+    !profile?.heightCm ? "Größe" : null,
     !profile?.weightKg ? "Gewicht" : null,
-    !profile?.activityLevel ? "Aktivitaet" : null,
+    !profile?.activityLevel ? "Aktivität" : null,
   ].filter(Boolean) as string[];
 
   return (

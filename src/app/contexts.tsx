@@ -848,7 +848,6 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
     const mealRef = doc(collection(db, `users/${user.uid}/meals`));
     const now = new Date().toISOString();
-    const photo = input.photoAssets ? await uploadMealImages(user.uid, mealRef.id, input.photoAssets) : null;
     const favorite = Boolean(input.favorite);
     const savedFoodId = favorite ? mealRef.id : null;
     const mealData: MealRecord = {
@@ -864,7 +863,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       loggedAt: now,
       createdAt: now,
       updatedAt: now,
-      photo,
+      photo: null,
       userContext: input.userContext ?? null,
       transcript: input.transcript ?? null,
       percentOfDailySpend: computeDailyCoverage(
@@ -877,22 +876,33 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       baseSnapshot,
     };
 
-    await setDoc(mealRef, mealData);
+    const writes: Promise<void>[] = [setDoc(mealRef, mealData)];
 
     if (favorite) {
-      await setDoc(doc(db, `users/${user.uid}/savedFoods`, savedFoodId!), {
-        id: savedFoodId,
-        title: input.estimate.mealTitle,
-        summary: input.estimate.summary,
-        items: input.estimate.items,
-        calories: input.estimate.calories,
-        macros: input.estimate.macros,
-        defaultServingLabel: input.estimate.items[0]?.portion ?? "1 Portion",
-        usageCount: 0,
-        lastUsedAt: now,
-        linkedMealId: mealRef.id,
-        favorite: true,
-      });
+      writes.push(
+        setDoc(doc(db, `users/${user.uid}/savedFoods`, savedFoodId!), {
+          id: savedFoodId,
+          title: input.estimate.mealTitle,
+          summary: input.estimate.summary,
+          items: input.estimate.items,
+          calories: input.estimate.calories,
+          macros: input.estimate.macros,
+          defaultServingLabel: input.estimate.items[0]?.portion ?? "1 Portion",
+          usageCount: 0,
+          lastUsedAt: now,
+          linkedMealId: mealRef.id,
+          favorite: true,
+        }),
+      );
+    }
+
+    await Promise.all(writes);
+
+    if (input.photoAssets) {
+      uploadMealImages(user.uid, mealRef.id, input.photoAssets).then(
+        (photo) => updateDoc(mealRef, { photo }),
+        (err) => console.warn("Background image upload failed:", err),
+      );
     }
   }
 

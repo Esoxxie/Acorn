@@ -211,21 +211,26 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
     setError(null);
 
     try {
-      const payload = {
-        source: file ? "photo" : editingMeal?.source ?? "manual_ai",
-        estimate,
-        photoAssets: file ? preparedAssets : undefined,
-        userContext: file ? entryText.trim() || null : null,
-        transcript: entryText.trim() || null,
-      };
-
       if (editingMeal) {
         await updateMeal(editingMeal, {
-          ...payload,
+          source: file ? "photo" : editingMeal.source ?? "manual_ai",
+          mealTitle: estimate.mealTitle,
+          summary: estimate.summary,
+          confidence: estimate.confidence,
+          assumptions: estimate.assumptions,
+          photoAssets: file ? preparedAssets : undefined,
+          userContext: file ? entryText.trim() || null : null,
+          transcript: entryText.trim() || null,
           baseSnapshot: createMealSnapshot(estimate),
         });
       } else {
-        await saveMeal(payload);
+        await saveMeal({
+          source: file ? "photo" : "manual_ai",
+          estimate,
+          photoAssets: file ? preparedAssets : undefined,
+          userContext: file ? entryText.trim() || null : null,
+          transcript: entryText.trim() || null,
+        });
       }
 
       closeLogFlow();

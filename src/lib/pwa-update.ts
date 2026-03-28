@@ -50,13 +50,13 @@ export function initializePwaUpdates() {
       setSnapshot({
         checking: false,
         updateAvailable: true,
-        message: "Update verfuegbar",
+        message: "Update verfügbar",
       });
     },
     onOfflineReady() {
       setSnapshot({
         offlineReady: true,
-        message: snapshot.updateAvailable ? "Update verfuegbar" : "App ist aktuell",
+        message: snapshot.updateAvailable ? "Update verfügbar" : "App ist aktuell",
       });
     },
     onRegisteredSW(_swUrl: string, registration?: ServiceWorkerRegistration) {
@@ -66,7 +66,7 @@ export function initializePwaUpdates() {
     onRegisterError() {
       setSnapshot({
         checking: false,
-        message: "Updates konnten nicht geprueft werden.",
+        message: "Updates konnten nicht geprüft werden.",
       });
     },
   });
@@ -74,13 +74,13 @@ export function initializePwaUpdates() {
 
 async function checkForUpdate() {
   if (!snapshot.supported) {
-    setSnapshot({ message: "Updates werden auf diesem Geraet nicht unterstuetzt." });
+    setSnapshot({ message: "Updates werden auf diesem Gerät nicht unterstützt." });
     return;
   }
 
   setSnapshot({
     checking: true,
-    message: "Pruefe auf Updates...",
+    message: "Prüfe auf Updates...",
   });
 
   try {
@@ -96,12 +96,12 @@ async function checkForUpdate() {
 
     setSnapshot({
       checking: false,
-      message: "Update verfuegbar",
+      message: "Update verfügbar",
     });
   } catch {
     setSnapshot({
       checking: false,
-      message: "Updates konnten nicht geprueft werden.",
+      message: "Updates konnten nicht geprüft werden.",
     });
   }
 }

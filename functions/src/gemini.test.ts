@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buildPrompt, normalizeEstimate, runGeminiMealAnalysis } from "./gemini";
+import { buildPrompt, buildSystemInstruction, normalizeEstimate, runGeminiMealAnalysis } from "./gemini";
 
 const { generateContent } = vi.hoisted(() => ({
   generateContent: vi.fn(),
@@ -250,11 +250,30 @@ describe("Gemini meal estimate contract", () => {
     consoleError.mockRestore();
   });
 
-  it("builds a prompt that names the exact contract fields", () => {
+  it("builds a system instruction with behavioral rules", () => {
+    const system = buildSystemInstruction();
+
+    expect(system).toContain("Du bist Acorn");
+    expect(system).toContain("confidence ist ein ganzzahliger Wert von 1 bis 99");
+    expect(system).toContain("refinementQuestions");
+  });
+
+  it("builds a user prompt with only dynamic context", () => {
     const prompt = buildPrompt(baseInput);
 
-    expect(prompt).toContain("Du bist Acorn");
-    expect(prompt).toContain("mealTitle, summary, calories, confidence, assumptions, macros, items, refinementQuestions");
-    expect(prompt).toContain("Gib keine alternativen Feldnamen");
+    expect(prompt).toContain("Hähnchen-Reis-Bowl");
+    expect(prompt).toContain("Nutzerkontext: keiner");
+    expect(prompt).not.toContain("Du bist Acorn");
+  });
+
+  it("passes system instruction to Gemini config", async () => {
+    generateContent.mockResolvedValue({
+      text: JSON.stringify(canonicalEstimate),
+    });
+
+    await runGeminiMealAnalysis(baseInput, { apiKey: "test-key", model: "gemini-2.5-flash" });
+
+    const request = generateContent.mock.calls[0]?.[0];
+    expect(request.config.systemInstruction).toBe(buildSystemInstruction());
   });
 });

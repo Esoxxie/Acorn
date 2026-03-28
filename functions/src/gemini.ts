@@ -404,6 +404,22 @@ export function normalizeEstimate(raw: unknown): MealEstimate {
   };
 }
 
+const SYSTEM_INSTRUCTION = [
+  "Du bist Acorn, ein sorgfältiger Kalorien- und Makroschätzer für eine mobile App.",
+  "Fülle alle Felder gemäß Schema vollständig aus. Verwende Gramm für alle Makros.",
+  "mealTitle muss kurz und natürlich sein. summary muss genau ein knapper Satz sein.",
+  "confidence ist ein ganzzahliger Wert von 1 bis 99.",
+  "Verwende stabile, slugartige ids wie gegrilltes-haehnchen, extra-sauce, portion-gross oder dressing-separat.",
+  "assumptions müssen kurz, ehrlich und konkret sein. Nutze ein leeres Array, wenn es keine wichtigen Annahmen gibt.",
+  "Wenn es eine relevante Unsicherheit gibt, die Kalorien oder Makros spürbar verändern würde, erstelle 1 bis 3 refinementQuestions mit jeweils 2 bis 4 gut antippbaren Optionen.",
+  "Wenn es keine relevante Unsicherheit gibt, gib refinementQuestions als leeres Array zurück.",
+  "Wenn dies bereits eine Verfeinerungsanfrage ist, aktualisiere die Schätzung anhand der ausgewählten Antworten und behalte nur solche restlichen refinementQuestions, die noch wichtig sind.",
+].join("\n");
+
+export function buildSystemInstruction() {
+  return SYSTEM_INSTRUCTION;
+}
+
 export function buildPrompt(input: AnalyzeEntryInput) {
   const modeInstructions =
     input.mode === "photo"
@@ -424,24 +440,7 @@ export function buildPrompt(input: AnalyzeEntryInput) {
       ? `Manuelle Beschreibung: ${input.manualText?.trim() ?? ""}`
       : "Das Foto wurde als eingebettete Bilddaten angehängt.";
 
-  return [
-    "Du bist Acorn, ein sorgfältiger Kalorien- und Makroschätzer für eine mobile App mit Fokus auf Fotos.",
-    modeInstructions,
-    mealText,
-    contextBlock,
-    refinementBlock,
-    "Gib ausschließlich JSON zurück, ohne Markdown-Codeblöcke oder Erklärtext.",
-    "Gib exakt diese Top-Level-Felder zurück und benenne sie nicht um: mealTitle, summary, calories, confidence, assumptions, macros, items, refinementQuestions.",
-    "mealTitle muss kurz und natürlich sein. summary muss genau ein knapper Satz sein.",
-    "macros müssen immer protein, carbs, fat und fiber enthalten. Verwende Gramm für alle Makros.",
-    "Jeder Eintrag muss id, name, portion, calories und macros enthalten.",
-    "Verwende stabile, slugartige ids wie gegrilltes-haehnchen, extra-sauce, portion-gross oder dressing-separat.",
-    "assumptions müssen kurz, ehrlich und konkret sein. Nutze ein leeres Array, wenn es keine wichtigen Annahmen gibt.",
-    "Wenn es eine relevante Unsicherheit gibt, die Kalorien oder Makros spürbar verändern würde, erstelle 1 bis 3 refinementQuestions mit jeweils 2 bis 4 gut antippbaren Optionen.",
-    "Wenn es keine relevante Unsicherheit gibt, gib refinementQuestions als leeres Array zurück.",
-    "Wenn dies bereits eine Verfeinerungsanfrage ist, aktualisiere die Schätzung anhand der ausgewählten Antworten und behalte nur solche restlichen refinementQuestions, die noch wichtig sind.",
-    "Gib keine alternativen Feldnamen wie title, description, totalCalories, serving, kcal, question, text oder value aus.",
-  ].join("\n");
+  return [modeInstructions, mealText, contextBlock, refinementBlock].join("\n");
 }
 
 export async function runGeminiMealAnalysis(
@@ -473,6 +472,7 @@ export async function runGeminiMealAnalysis(
       model: config.model,
       contents: [{ role: "user", parts }],
       config: {
+        systemInstruction: buildSystemInstruction(),
         temperature: 0.35,
         responseMimeType: "application/json",
         responseJsonSchema: geminiResponseJsonSchema,

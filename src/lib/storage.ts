@@ -13,15 +13,16 @@ export async function uploadMealImages(
   const displayPath = `users/${uid}/meals/${mealId}/display.webp`;
   const thumbPath = `users/${uid}/meals/${mealId}/thumb.webp`;
 
-  await uploadBytes(ref(storage, displayPath), assets.displayBlob, {
-    contentType: assets.displayBlob.type,
-    cacheControl: "public,max-age=31536000,immutable",
-  });
-
-  await uploadBytes(ref(storage, thumbPath), assets.thumbBlob, {
-    contentType: assets.thumbBlob.type,
-    cacheControl: "public,max-age=31536000,immutable",
-  });
+  await Promise.all([
+    uploadBytes(ref(storage, displayPath), assets.displayBlob, {
+      contentType: assets.displayBlob.type,
+      cacheControl: "public,max-age=31536000,immutable",
+    }),
+    uploadBytes(ref(storage, thumbPath), assets.thumbBlob, {
+      contentType: assets.thumbBlob.type,
+      cacheControl: "public,max-age=31536000,immutable",
+    }),
+  ]);
 
   return {
     storagePath: displayPath,

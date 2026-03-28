@@ -3,7 +3,7 @@
 :root {
   color-scheme: light dark;
   --bg: #f5efe7;
-  --bg-elevated: rgba(255, 251, 247, 0.86);
+  --bg-elevated: rgba(255, 251, 247, 0.97);
   --bg-strong: #fdf9f4;
   --text: #1f1913;
   --text-muted: #6d645c;
@@ -26,7 +26,7 @@
 
 :root[data-theme="dark"] {
   --bg: #171310;
-  --bg-elevated: rgba(30, 24, 20, 0.84);
+  --bg-elevated: rgba(30, 24, 20, 0.97);
   --bg-strong: #221b16;
   --text: #f6efe6;
   --text-muted: #b7a99c;
@@ -59,10 +59,23 @@ body {
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
   color: var(--text);
+  background: var(--bg);
+}
+
+#app {
+  position: relative;
+}
+
+#app::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
   background:
-    radial-gradient(circle at top right, rgba(170, 113, 64, 0.2), transparent 24%),
-    radial-gradient(circle at top left, rgba(64, 93, 57, 0.14), transparent 28%),
-    var(--bg);
+    radial-gradient(circle at top right, rgba(170, 113, 64, 0.15), transparent 24%),
+    radial-gradient(circle at top left, rgba(64, 93, 57, 0.1), transparent 28%);
+  will-change: transform;
+  pointer-events: none;
 }
 
 button,
@@ -107,7 +120,6 @@ a {
   background: var(--bg-elevated);
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(18px);
 }
 
 .hero-card {
@@ -133,7 +145,7 @@ a {
 .hero-card--auth h1 {
   max-width: 10ch;
   text-wrap: balance;
-  font-size: clamp(2.6rem, 9vw, 4.4rem);
+  font-size: clamp(2.2rem, 8vw, 2.8rem);
 }
 
 .hero-card--auth .hero-card__actions {
@@ -164,7 +176,7 @@ a {
 }
 
 .hero-card h1 {
-  font-size: clamp(2.25rem, 10vw, 3.8rem);
+  font-size: clamp(2rem, 8vw, 2.4rem);
   line-height: 0.96;
 }
 
@@ -186,22 +198,27 @@ a {
 .acorn-logo {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  color: var(--accent);
+  gap: 10px;
+  color: var(--text);
   font-family: "Fraunces", Georgia, serif;
-  font-size: 1.45rem;
+  font-size: 1.3rem;
   font-weight: 700;
   letter-spacing: -0.03em;
 }
 
 .acorn-logo svg {
-  width: 44px;
-  height: 44px;
+  width: 28px;
+  height: 28px;
   flex: 0 0 auto;
 }
 
 .acorn-logo--compact {
-  font-size: 1.15rem;
+  font-size: 1.1rem;
+}
+
+.acorn-logo--compact svg {
+  width: 24px;
+  height: 24px;
 }
 
 .acorn-logo--compact svg {
@@ -270,7 +287,7 @@ a {
 
 .shell {
   min-height: 100dvh;
-  padding: 16px 16px 124px;
+  padding: 14px 14px 110px;
 }
 
 .topbar {
@@ -289,7 +306,7 @@ a {
 .page-stack,
 .stack {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .stats-grid,
@@ -305,10 +322,9 @@ a {
 .stat-card,
 .section-card,
 .estimate-card,
-.meal-card,
 .saved-food-card {
   border-radius: 24px;
-  padding: 18px;
+  padding: 16px;
 }
 
 .stat-card {
@@ -323,7 +339,7 @@ a {
 }
 
 .stat-card strong {
-  font-size: clamp(1.4rem, 6vw, 2rem);
+  font-size: 1.5rem;
 }
 
 .section-card__header {
@@ -334,6 +350,19 @@ a {
 
 .section-card__header:last-child {
   margin-bottom: 0;
+}
+
+.section-card__header--toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--text);
+  font: inherit;
 }
 
 .toolbar {
@@ -377,10 +406,6 @@ a {
   border-color: transparent;
 }
 
-.saved-food-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 .saved-food-card {
   display: grid;
   gap: 12px;
@@ -392,50 +417,6 @@ a {
   line-height: var(--line-height-heading);
 }
 
-.meal-card {
-  display: grid;
-  grid-template-columns: 72px 1fr;
-  gap: 14px;
-}
-
-.meal-card__thumb {
-  width: 72px;
-  height: 72px;
-  object-fit: cover;
-  border-radius: 18px;
-  background: linear-gradient(135deg, rgba(181, 109, 63, 0.8), rgba(48, 75, 53, 0.82));
-}
-
-.meal-card__thumb--placeholder {
-  display: grid;
-  place-items: center;
-  font-size: 1.4rem;
-  font-weight: 800;
-  color: #fff8f0;
-}
-
-.meal-card__content,
-.meal-card__headline,
-.meal-card__kcal {
-  display: grid;
-  gap: 8px;
-}
-
-.meal-card__headline {
-  grid-template-columns: 1fr auto;
-}
-
-.meal-card__time,
-.meal-card__kcal span {
-  color: var(--text-muted);
-  font-size: var(--font-size-caption);
-}
-
-.meal-card h3 {
-  margin: 0;
-  font-size: var(--font-size-title-sm);
-  line-height: var(--line-height-heading);
-}
 
 .macro-row {
   display: flex;
@@ -516,7 +497,7 @@ a {
 .photo-picker__image,
 .estimate-hero {
   width: 100%;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 3;
   object-fit: cover;
   border-radius: 20px;
 }
@@ -590,9 +571,9 @@ a {
 
 .bottom-nav {
   position: fixed;
-  left: 16px;
-  right: 16px;
-  bottom: 16px;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
   padding: 8px;
   border-radius: 22px;
   background: rgba(253, 249, 244, 0.92);
@@ -601,7 +582,9 @@ a {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
+  will-change: transform;
   z-index: 30;
 }
 
@@ -650,52 +633,3 @@ a {
   font-size: var(--font-size-body-sm);
 }
 
-@media (min-width: 780px) {
-  .shell {
-    max-width: 760px;
-    margin: 0 auto;
-    padding-bottom: 40px;
-  }
-
-  .bottom-nav,
-  .floating-log-button {
-    position: static;
-    box-shadow: none;
-  }
-
-  .floating-log-button {
-    display: none;
-  }
-
-  .topbar__add-button {
-    display: inline-flex;
-  }
-
-  .bottom-nav {
-    margin-top: 18px;
-    padding: 0;
-    background: transparent;
-    border: 0;
-    display: flex;
-    justify-content: center;
-  }
-
-  .bottom-nav__item {
-    min-height: 42px;
-    padding: 0 16px;
-    display: inline-flex;
-  }
-
-  .saved-food-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .sheet {
-    width: min(560px, 100%);
-    margin-left: auto;
-  }
-
-  .hero-card--auth {
-    padding: 40px 34px 34px;
-  }
-}

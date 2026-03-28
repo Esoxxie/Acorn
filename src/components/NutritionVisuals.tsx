@@ -1,4 +1,3 @@
-import { Flame } from "lucide-react";
 import { useId } from "react";
 import type { MacroSnapshot } from "../../shared/models";
 import { uiCopy } from "../lib/copy";
@@ -16,15 +15,6 @@ import "../styles/nutrition-visuals.css";
 type RadialGoalRingProps = {
   currentCalories: number;
   goalCalories: number | null;
-  title: string;
-  subtitle: string;
-  className?: string;
-};
-
-type CompactProgressDonutProps = {
-  percentage: number;
-  label: string;
-  detail: string;
   className?: string;
 };
 
@@ -61,28 +51,27 @@ function ringMetrics(percentage: number) {
   };
 }
 
-export function RadialGoalRing({ currentCalories, goalCalories, subtitle, title, className }: RadialGoalRingProps) {
+function clampToCanvas(value: number) {
+  return Math.max(0, Math.min(100, value));
+}
+
+export function RadialGoalRing({ currentCalories, goalCalories, className }: RadialGoalRingProps) {
   const ringId = useId();
   const progress = getCalorieProgress(currentCalories, goalCalories);
-  const metrics = ringMetrics(progress.percent);
+  const metrics = ringMetrics(clampToCanvas(progress.percent));
   const overGoal = Boolean(progress.overflowCalories && progress.overflowCalories > 0);
-  const label = goalCalories ? `${formatCalories(goalCalories)}` : uiCopy.summary.missingGoal;
-  const ringSubtitle = progress.hasGoal
-    ? progress.overflowCalories && progress.overflowCalories > 0
-      ? `${formatCalories(progress.overflowCalories)} ueber dem Ziel`
-      : progress.remainingCalories != null
-        ? `${formatCalories(progress.remainingCalories)} uebrig`
-        : subtitle
-    : subtitle;
+  const remaining = progress.hasGoal
+    ? overGoal
+      ? `+${formatCalories(progress.overflowCalories ?? 0)} über Ziel`
+      : `${formatCalories(progress.remainingCalories ?? 0)} übrig`
+    : null;
 
   return (
     <section className={["nutrition-ring", className].filter(Boolean).join(" ")}>
       <svg
         aria-hidden="true"
         className="nutrition-ring__svg"
-        height={metrics.size}
         viewBox={`0 0 ${metrics.size} ${metrics.size}`}
-        width={metrics.size}
       >
         <defs>
           <linearGradient id={`${ringId}-progress`} x1="0%" x2="100%" y1="0%" y2="100%">
@@ -113,58 +102,16 @@ export function RadialGoalRing({ currentCalories, goalCalories, subtitle, title,
         />
       </svg>
       <div className="nutrition-ring__center">
-        <div className="nutrition-ring__eyebrow">
-          <Flame size={14} />
-          <span>{title}</span>
-        </div>
         <strong>{formatCalories(currentCalories)}</strong>
-        <span>{label}</span>
-        <p>{ringSubtitle}</p>
+        {goalCalories ? (
+          <span>von {formatCalories(goalCalories)}</span>
+        ) : (
+          <span>{uiCopy.summary.missingGoal}</span>
+        )}
+        {remaining ? <p>{remaining}</p> : null}
       </div>
     </section>
   );
-}
-
-export function CompactProgressDonut({ percentage, detail, label, className }: CompactProgressDonutProps) {
-  const ringId = useId();
-  const size = 84;
-  const radius = 30;
-  const strokeWidth = 8;
-  const circumference = 2 * Math.PI * radius;
-  const progress = (circumference * clampToCanvas(percentage)) / 100;
-
-  return (
-    <div className={["compact-donut", className].filter(Boolean).join(" ")}>
-      <svg aria-hidden="true" className="compact-donut__svg" height={size} viewBox={`0 0 ${size} ${size}`} width={size}>
-        <defs>
-          <linearGradient id={`${ringId}-donut`} x1="0%" x2="100%" y1="0%" y2="100%">
-            <stop offset="0%" stopColor="var(--nutrition-ring-start)" />
-            <stop offset="100%" stopColor="var(--nutrition-ring-end)" />
-          </linearGradient>
-        </defs>
-        <circle className="compact-donut__track" cx={size / 2} cy={size / 2} r={radius} strokeWidth={strokeWidth} />
-        <circle
-          className="compact-donut__progress"
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke={`url(#${ringId}-donut)`}
-          strokeDasharray={`${circumference} ${circumference}`}
-          strokeDashoffset={circumference - progress}
-          strokeWidth={strokeWidth}
-        />
-      </svg>
-      <div className="compact-donut__center">
-        <strong>{Math.round(percentage)}%</strong>
-        <span>{label}</span>
-      </div>
-      <p className="compact-donut__detail">{detail}</p>
-    </div>
-  );
-}
-
-function clampToCanvas(value: number) {
-  return Math.max(0, Math.min(100, value));
 }
 
 export function MacroProgressList({ macroTotals, macroTargets }: MacroProgressListProps) {
@@ -182,7 +129,7 @@ export function MacroProgressList({ macroTotals, macroTargets }: MacroProgressLi
 function MacroProgressRow({ row }: { row: MacroProgressRow }) {
   const targetLabel = row.target ? `${Math.round(row.target)}g` : uiCopy.summary.noTarget;
   const currentLabel = formatMacro(row.current);
-  const fillWidth = row.percent ?? 0;
+  const fillWidth = clampToCanvas(row.percent ?? 0);
 
   return (
     <article className="macro-progress-row">
@@ -219,65 +166,32 @@ export function DailySummaryCard({
   macroTotals,
   missingProfileFields,
 }: DailySummaryCardProps) {
-  const calorieProgress = getCalorieProgress(currentCalories, goalCalories);
   const macroTargets = deriveMacroTargets(goalCalories);
-  const explanation = goalCalories
-    ? calorieProgress.overflowCalories && calorieProgress.overflowCalories > 0
-      ? `${formatCalories(calorieProgress.overflowCalories)} ueber deinem Tagesziel`
-      : `${formatCalories(calorieProgress.remainingCalories ?? 0)} bis zum Tagesziel uebrig`
+  const subtitle = goalCalories
+    ? `${formatCalories(currentCalories)} in ${mealCount} ${mealCount === 1 ? "Eintrag" : "Einträgen"}`
     : missingProfileFields.length
-      ? `Ergaenze ${missingProfileFields.join(", ")}, damit wir dein Kalorienziel berechnen koennen`
-      : "Vervollstaendige dein Profil, damit wir dein Kalorienziel berechnen koennen.";
-  const summaryDetail = goalCalories
-    ? `${formatCalories(currentCalories)} in ${mealCount} ${mealCount === 1 ? "Eintrag" : "Eintraegen"}`
-    : missingProfileFields.length
-      ? `Trage ${missingProfileFields.join(", ")} ein, um dein Kalorienziel freizuschalten.`
-      : "Vervollstaendige dein Profil, um dein Kalorienziel freizuschalten.";
+      ? `Ergänze ${missingProfileFields.join(", ")} im Profil.`
+      : "Vervollständige dein Profil.";
 
   return (
     <section className="section-card daily-summary-card">
       <div className="daily-summary-card__header">
         <div className="daily-summary-card__titles">
-          <span className="daily-summary-card__eyebrow">{uiCopy.summary.eyebrow}</span>
           <h1>{uiCopy.summary.title}</h1>
-          <p>{summaryDetail}</p>
+          <p>{subtitle}</p>
         </div>
-        <div className="daily-summary-card__badge">
-          {goalCalories ? `${uiCopy.summary.targetPrefix} ${formatCalories(goalCalories)}` : uiCopy.summary.targetUnavailable}
-        </div>
+        {goalCalories ? (
+          <div className="daily-summary-card__badge">
+            {uiCopy.summary.targetPrefix} {formatCalories(goalCalories)}
+          </div>
+        ) : null}
       </div>
 
       <RadialGoalRing
         className="daily-summary-card__ring"
         currentCalories={currentCalories}
         goalCalories={goalCalories}
-        subtitle={explanation}
-        title={goalCalories ? uiCopy.summary.consumed : uiCopy.summary.completeProfile}
       />
-
-      <div className="daily-summary-card__story">
-        <CompactProgressDonut
-          detail={
-            goalCalories
-              ? `${calorieProgress.percent.toFixed(0)}% deines Budgets sind verbraucht`
-              : "Ergaenze dein Profil fuer ein Tagesbudget."
-          }
-          label={uiCopy.summary.budget}
-          percentage={goalCalories ? calorieProgress.percent : 0}
-        />
-        <div className="daily-summary-card__story-copy">
-          <strong>
-            {goalCalories
-              ? `${formatCalories(currentCalories)} verbraucht`
-              : "Alter, Geschlecht, Groesse, Gewicht und Aktivitaet ergaenzen"}
-          </strong>
-          <p>
-            {goalCalories
-              ? explanation
-              : "Sobald dein Profil vollstaendig ist, berechnen wir automatisch dein Kalorienziel und die Makros."}
-          </p>
-        </div>
-      </div>
 
       <MacroProgressList macroTargets={macroTargets} macroTotals={macroTotals} />
     </section>

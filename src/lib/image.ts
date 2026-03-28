@@ -64,9 +64,11 @@ async function resizeImage(blob: Blob, maxEdge: number, quality: number): Promis
 
 export async function prepareImageAssets(file: File): Promise<PreparedImageAssets> {
   const displayBlob = await resizeImage(file, 1280, 0.84);
-  const thumbBlob = await resizeImage(displayBlob, 360, 0.8);
+  const [thumbBlob, imageBase64] = await Promise.all([
+    resizeImage(file, 360, 0.8),
+    blobToDataUrl(displayBlob).then((url) => url.split(",")[1] ?? ""),
+  ]);
   const previewUrl = URL.createObjectURL(displayBlob);
-  const imageBase64 = (await blobToDataUrl(displayBlob)).split(",")[1] ?? "";
 
   return {
     displayBlob,
