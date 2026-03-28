@@ -8,51 +8,33 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
+      devOptions: {
+        enabled: true,
+        type: "module",
+      },
       includeAssets: ["favicon.svg", "icons/acorn-mask.svg"],
       manifest: {
         name: "Acorn",
         short_name: "Acorn",
-        description: "Minimal calorie tracking with photo-first food logging.",
-        theme_color: "#8f5a34",
-        background_color: "#f5efe7",
+        description: "Acorn hält dein Ernährungsprotokoll griffbereit.",
+        theme_color: "#141210",
+        background_color: "#141210",
         display: "standalone",
         start_url: "/",
-        orientation: "portrait",
-        categories: ["health", "lifestyle", "productivity"],
+        scope: "/",
         icons: [
           {
-            src: "/icons/icon-192.png",
-            sizes: "192x192",
-            type: "image/png",
-          },
-          {
-            src: "/icons/icon-512.png",
-            sizes: "512x512",
-            type: "image/png",
-          },
-          {
-            src: "/icons/icon-512-maskable.png",
-            sizes: "512x512",
-            type: "image/png",
+            src: "/icons/acorn-mask.svg",
+            sizes: "any",
+            type: "image/svg+xml",
             purpose: "maskable",
           },
-        ],
-      },
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,webp}"],
-        navigateFallback: "/index.html",
-        runtimeCaching: [
           {
-            urlPattern: ({ request }) => request.destination === "image",
-            handler: "CacheFirst",
-            options: {
-              cacheName: "acorn-images",
-              expiration: {
-                maxEntries: 80,
-                maxAgeSeconds: 60 * 60 * 24 * 14,
-              },
-            },
+            src: "/favicon.svg",
+            sizes: "any",
+            type: "image/svg+xml",
+            purpose: "any",
           },
         ],
       },

@@ -1,4 +1,5 @@
 import { format, isToday, parseISO } from "date-fns";
+import { de } from "date-fns/locale";
 
 export function formatCalories(value: number): string {
   return `${Math.round(value)} kcal`;
@@ -15,12 +16,12 @@ export function formatPercent(value: number): string {
 export function formatDateLabel(iso: string): string {
   const date = parseISO(iso);
   if (isToday(date)) {
-    return "Today";
+    return "Heute";
   }
 
-  return format(date, "EEE, d MMM");
+  return format(date, "EEE, d. MMM", { locale: de });
 }
 
 export function formatTimeLabel(iso: string): string {
-  return format(parseISO(iso), "HH:mm");
+  return format(parseISO(iso), "HH:mm", { locale: de });
 }

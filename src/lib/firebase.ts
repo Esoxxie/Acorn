@@ -98,19 +98,19 @@ export function getAuthErrorMessage(error: unknown): string {
   switch (code) {
     case "auth/unauthorized-domain": {
       const host = typeof window === "undefined" ? "this host" : window.location.hostname;
-      return `Google sign-in is blocked for ${host}. Add that host in Firebase Authentication > Settings > Authorized domains, then try again.`;
+      return `Google-Login ist fuer ${host} noch nicht freigeschaltet. Fuege die Domain in Firebase Authentication > Settings > Authorized domains hinzu und versuche es erneut.`;
     }
     case "auth/popup-blocked":
-      return "The sign-in popup was blocked by the browser. Allow popups for this site and try again.";
+      return "Das Login-Popup wurde vom Browser blockiert. Erlaube Popups fuer diese Seite und versuche es erneut.";
     case "auth/popup-closed-by-user":
-      return "The sign-in popup closed before login finished. Try again and keep the popup open.";
+      return "Das Login-Popup wurde geschlossen, bevor die Anmeldung abgeschlossen war. Versuche es erneut und lasse das Fenster offen.";
     case "auth/network-request-failed":
-      return "The phone could not reach Firebase. Make sure the phone and this computer are on the same network and try again.";
+      return "Dein Geraet konnte Firebase nicht erreichen. Stelle sicher, dass Telefon und Computer im selben Netzwerk sind, und versuche es erneut.";
     default:
       if (error instanceof Error && error.message) {
         return error.message;
       }
 
-      return "Sign-in failed. Please try again.";
+      return "Anmeldung fehlgeschlagen. Bitte versuche es erneut.";
   }
 }

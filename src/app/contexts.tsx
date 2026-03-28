@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
@@ -25,7 +26,15 @@ import type {
   ThemePreference,
   UserProfile,
 } from "../../shared/models";
-import { calculateTdee, computeDailyCoverage, savedFoodToEstimate, scaleEstimate } from "../../shared/calorie";
+import {
+  calculateTdee,
+  computeDailyCoverage,
+  createMealSnapshot,
+  savedFoodToEstimate,
+  scaleEstimate,
+  scaleMealSnapshot,
+  type MealSnapshot,
+} from "../../shared/calorie";
 import { createSeededDemoData } from "../lib/demo-data";
 import {
   auth,
@@ -36,6 +45,7 @@ import {
 import { deleteMealImages, uploadMealImages } from "../lib/storage";
 import type { PreparedImageAssets } from "../lib/image";
 import { appEnv } from "../lib/env";
+import { clearCachedProfile, readCachedProfile, writeCachedProfile } from "../lib/profile-cache";
 
 type SessionUser = {
   uid: string;
@@ -63,23 +73,45 @@ type SaveMealInput = {
   favorite?: boolean;
 };
 
+type MealUpdateInput = Partial<Omit<MealRecord, "id" | "servings" | "baseSnapshot">> & {
+  photoAssets?: PreparedImageAssets | null;
+  servings?: number;
+  baseSnapshot?: MealSnapshot | null;
+};
+
 type AppDataContextValue = {
   profile: UserProfile | null;
   meals: MealRecord[];
   savedFoods: SavedFood[];
   loading: boolean;
+  syncError: string | null;
   saveProfile: (profile: UserProfile) => Promise<void>;
   saveThemePreference: (themePreference: ThemePreference) => Promise<void>;
   saveMeal: (input: SaveMealInput) => Promise<void>;
+  updateMeal: (meal: MealRecord, patch: MealUpdateInput) => Promise<void>;
+  updateMealServings: (meal: MealRecord, servings: number) => Promise<void>;
   toggleMealFavorite: (meal: MealRecord) => Promise<void>;
   quickLogSavedFood: (savedFood: SavedFood, multiplier: number) => Promise<void>;
   deleteMeal: (meal: MealRecord) => Promise<void>;
+};
+
+type AppDataErrorState = {
+  profile: string | null;
+  meals: string | null;
+  savedFoods: string | null;
+  profileSave: string | null;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 const DEMO_SESSION_KEY = "acorn.demo.session";
 const DEMO_DATA_KEY = "acorn.demo.data";
+const EMPTY_APP_DATA_ERRORS: AppDataErrorState = {
+  profile: null,
+  meals: null,
+  savedFoods: null,
+  profileSave: null,
+};
 
 export function buildProfileBootstrapPatch(user: SessionUser, now: string): Partial<UserProfile> {
   return {
@@ -161,6 +193,30 @@ function saveDemoData(data: { profile: UserProfile; meals: MealRecord[]; savedFo
   window.localStorage.setItem(DEMO_DATA_KEY, JSON.stringify(data));
 }
 
+function mealSnapshotFromRecord(meal: Pick<MealRecord, "calories" | "macros" | "items">): MealSnapshot {
+  return createMealSnapshot(meal);
+}
+
+function mealSnapshotFromMeal(meal: MealRecord): MealSnapshot {
+  return meal.baseSnapshot ? createMealSnapshot(meal.baseSnapshot) : mealSnapshotFromRecord(meal);
+}
+
+function savedFoodFromMeal(meal: MealRecord, existingSavedFood?: SavedFood | null): SavedFood {
+  return {
+    id: meal.savedFoodId ?? meal.id,
+    title: meal.mealTitle,
+    summary: meal.summary,
+    items: meal.items,
+    calories: meal.calories,
+    macros: meal.macros,
+    defaultServingLabel: meal.items[0]?.portion ?? "1 Portion",
+    usageCount: existingSavedFood?.usageCount ?? 0,
+    lastUsedAt: existingSavedFood?.lastUsedAt ?? meal.updatedAt ?? meal.loggedAt ?? null,
+    linkedMealId: existingSavedFood?.linkedMealId ?? meal.id,
+    favorite: true,
+  };
+}
+
 function ensureMeal(raw: Partial<MealRecord>, id: string): MealRecord {
   return {
     id,
@@ -181,18 +237,20 @@ function ensureMeal(raw: Partial<MealRecord>, id: string): MealRecord {
     percentOfDailySpend: raw.percentOfDailySpend ?? 0,
     favorite: raw.favorite ?? false,
     savedFoodId: raw.savedFoodId ?? null,
+    servings: raw.servings ?? 1,
+    baseSnapshot: raw.baseSnapshot ?? null,
   };
 }
 
 function ensureSavedFood(raw: Partial<SavedFood>, id: string): SavedFood {
   return {
     id,
-    title: raw.title ?? "Saved food",
+    title: raw.title ?? "Favorit",
     summary: raw.summary ?? "",
     items: raw.items ?? [],
     calories: raw.calories ?? 0,
     macros: raw.macros ?? { protein: 0, carbs: 0, fat: 0, fiber: null },
-    defaultServingLabel: raw.defaultServingLabel ?? "1 serving",
+    defaultServingLabel: raw.defaultServingLabel ?? "1 Portion",
     usageCount: raw.usageCount ?? 0,
     lastUsedAt: raw.lastUsedAt ?? null,
     linkedMealId: raw.linkedMealId ?? null,
@@ -208,6 +266,48 @@ function normalizeProfile(profile: UserProfile, user: SessionUser): UserProfile 
     themePreference: profile.themePreference ?? "system",
     dailySpendKcal: calculateTdee(profile),
   };
+}
+
+function getSyncErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
+function getAppDataSyncError(errors: AppDataErrorState): string | null {
+  return errors.profileSave ?? errors.profile ?? errors.meals ?? errors.savedFoods;
+}
+
+export function mergeProfileSources(
+  user: SessionUser,
+  nextProfile: Partial<UserProfile> | null | undefined,
+  fallbackProfile: UserProfile | null = null,
+): UserProfile {
+  const merged = {
+    ...defaultProfileFromUser(user),
+    ...(fallbackProfile ?? {}),
+    ...(nextProfile ?? {}),
+  };
+
+  return normalizeProfile(
+    {
+      ...merged,
+      displayName: user.displayName ?? merged.displayName ?? null,
+      email: user.email ?? merged.email ?? null,
+      units: merged.units ?? "metric",
+      themePreference: merged.themePreference ?? "system",
+      age: merged.age ?? null,
+      sex: merged.sex ?? null,
+      heightCm: merged.heightCm ?? null,
+      weightKg: merged.weightKg ?? null,
+      activityLevel: merged.activityLevel ?? null,
+      createdAt: merged.createdAt ?? null,
+      updatedAt: merged.updatedAt ?? null,
+    },
+    user,
+  );
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
@@ -288,6 +388,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
 
         await signOut(auth);
+        if (user) {
+          clearCachedProfile(user.uid);
+        }
       },
       signInDemo: async () => {
         const demoUser: SessionUser = {
@@ -311,66 +414,159 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
 export function AppDataProvider({ children }: PropsWithChildren) {
   const { user } = useAuth();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(() =>
+    !user || user.isDemo || appEnv.usingDemoConfig ? null : readCachedProfile(user.uid),
+  );
   const [meals, setMeals] = useState<MealRecord[]>([]);
   const [savedFoods, setSavedFoods] = useState<SavedFood[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !user?.isDemo && !appEnv.usingDemoConfig);
+  const [appDataErrors, setAppDataErrors] = useState<AppDataErrorState>({ ...EMPTY_APP_DATA_ERRORS });
+  const latestProfileRef = useRef<UserProfile | null>(profile);
+
+  function setProfileState(nextProfile: UserProfile | null) {
+    latestProfileRef.current = nextProfile;
+    setProfile(nextProfile);
+
+    if (user && !user.isDemo && !appEnv.usingDemoConfig && nextProfile) {
+      writeCachedProfile(user.uid, nextProfile);
+    }
+  }
+
+  useEffect(() => {
+    latestProfileRef.current = profile;
+  }, [profile]);
 
   useEffect(() => {
     if (!user) {
+      latestProfileRef.current = null;
       setProfile(null);
       setMeals([]);
       setSavedFoods([]);
       setLoading(false);
+      setAppDataErrors({ ...EMPTY_APP_DATA_ERRORS });
       return;
     }
 
     if (user.isDemo || appEnv.usingDemoConfig) {
       const demoData = loadDemoData(user);
-      setProfile(demoData.profile);
+      setProfileState(demoData.profile);
       setMeals(demoData.meals);
       setSavedFoods(demoData.savedFoods);
       setLoading(false);
+      setAppDataErrors({ ...EMPTY_APP_DATA_ERRORS });
       return;
     }
 
-    let pending = 3;
-    const settle = () => {
-      pending -= 1;
-      if (pending <= 0) {
+    setLoading(true);
+    setAppDataErrors({ ...EMPTY_APP_DATA_ERRORS });
+
+    let active = true;
+    const settled = {
+      profile: false,
+      meals: false,
+      savedFoods: false,
+    };
+    const settle = (key: keyof typeof settled) => {
+      if (!active || settled[key]) {
+        return;
+      }
+
+      settled[key] = true;
+      if (settled.profile && settled.meals && settled.savedFoods) {
         setLoading(false);
       }
     };
 
-    setLoading(true);
-
     const unsubs = [
-      onSnapshot(doc(db, "users", user.uid), (snapshot) => {
-        const rawProfile = snapshot.exists() ? (snapshot.data() as UserProfile) : defaultProfileFromUser(user);
-        setProfile(normalizeProfile(rawProfile, user));
-        settle();
-      }),
+      onSnapshot(
+        doc(db, "users", user.uid),
+        (snapshot) => {
+          if (!active) {
+            return;
+          }
+
+          const rawProfile = snapshot.exists() ? (snapshot.data() as Partial<UserProfile>) : null;
+          const nextProfile = mergeProfileSources(user, rawProfile, latestProfileRef.current);
+          setProfileState(nextProfile);
+          setAppDataErrors((current) => ({
+            ...current,
+            profile: null,
+            profileSave: null,
+          }));
+          settle("profile");
+        },
+        (error) => {
+          if (!active) {
+            return;
+          }
+
+          setAppDataErrors((current) => ({
+            ...current,
+            profile: getSyncErrorMessage(error, "Dein Profil konnte nicht synchronisiert werden."),
+          }));
+          settle("profile");
+        },
+      ),
       onSnapshot(
         query(collection(db, `users/${user.uid}/meals`), orderBy("loggedAt", "desc")),
         (snapshot) => {
+          if (!active) {
+            return;
+          }
+
           setMeals(snapshot.docs.map((mealDoc) => ensureMeal(mealDoc.data() as Partial<MealRecord>, mealDoc.id)));
-          settle();
+          setAppDataErrors((current) => ({
+            ...current,
+            meals: null,
+          }));
+          settle("meals");
+        },
+        (error) => {
+          if (!active) {
+            return;
+          }
+
+          setAppDataErrors((current) => ({
+            ...current,
+            meals: getSyncErrorMessage(error, "Deine Eintraege konnten nicht synchronisiert werden."),
+          }));
+          settle("meals");
         },
       ),
       onSnapshot(
         query(collection(db, `users/${user.uid}/savedFoods`), orderBy("usageCount", "desc")),
         (snapshot) => {
+          if (!active) {
+            return;
+          }
+
           setSavedFoods(
             snapshot.docs.map((savedFoodDoc) =>
               ensureSavedFood(savedFoodDoc.data() as Partial<SavedFood>, savedFoodDoc.id),
             ),
           );
-          settle();
+          setAppDataErrors((current) => ({
+            ...current,
+            savedFoods: null,
+          }));
+          settle("savedFoods");
+        },
+        (error) => {
+          if (!active) {
+            return;
+          }
+
+          setAppDataErrors((current) => ({
+            ...current,
+            savedFoods: getSyncErrorMessage(error, "Deine Favoriten konnten nicht synchronisiert werden."),
+          }));
+          settle("savedFoods");
         },
       ),
     ];
 
     return () => {
+      active = false;
       unsubs.forEach((unsubscribe) => unsubscribe());
     };
   }, [user]);
@@ -380,7 +576,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       return;
     }
 
-    const merged = normalizeProfile(nextProfile, user);
+    const merged = mergeProfileSources(user, nextProfile, latestProfileRef.current);
 
     if (user.isDemo || appEnv.usingDemoConfig) {
       const nextData = {
@@ -388,28 +584,203 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         meals,
         savedFoods,
       };
-      setProfile(merged);
+      setProfileState(merged);
       saveDemoData(nextData);
       return;
     }
 
     const now = new Date().toISOString();
-    await setDoc(
-      doc(db, "users", user.uid),
+    const optimisticProfile = mergeProfileSources(
+      user,
       {
         ...merged,
         updatedAt: now,
-        createdAt: profile?.createdAt ?? now,
+        createdAt: latestProfileRef.current?.createdAt ?? merged.createdAt ?? now,
       },
-      { merge: true },
+      latestProfileRef.current,
     );
+    setAppDataErrors((current) => ({
+      ...current,
+      profileSave: null,
+    }));
+    setProfileState(optimisticProfile);
+
+    try {
+      await setDoc(doc(db, "users", user.uid), optimisticProfile, { merge: true });
+    } catch (error) {
+      setAppDataErrors((current) => ({
+        ...current,
+        profileSave: getSyncErrorMessage(error, "Profil wurde lokal gespeichert, konnte aber nicht synchronisiert werden."),
+      }));
+      throw new Error("Profil wurde lokal gespeichert, konnte aber nicht mit deinem Konto synchronisiert werden.");
+    }
   }
 
   async function saveThemePreference(themePreference: ThemePreference) {
     await saveProfile({
-      ...(profile ?? defaultProfileFromUser(user!)),
+      ...(latestProfileRef.current ?? defaultProfileFromUser(user!)),
       themePreference,
     });
+  }
+
+  async function updateMeal(meal: MealRecord, patch: MealUpdateInput) {
+    if (!user) {
+      return;
+    }
+
+    const { photoAssets, ...mealPatch } = patch;
+    const now = new Date().toISOString();
+    const existingSavedFoodId = meal.savedFoodId ?? meal.id;
+    const currentBaseSnapshot = mealSnapshotFromMeal(meal);
+    const nextServings = mealPatch.servings ?? meal.servings ?? 1;
+    const nextBaseSnapshot = mealPatch.baseSnapshot
+      ? createMealSnapshot(mealPatch.baseSnapshot)
+      : meal.baseSnapshot
+        ? createMealSnapshot(meal.baseSnapshot)
+        : currentBaseSnapshot;
+    const shouldRecalculateNutrition = mealPatch.baseSnapshot != null;
+    const nextScaledSnapshot = shouldRecalculateNutrition
+      ? scaleMealSnapshot(nextBaseSnapshot, nextServings)
+      : null;
+    const nextPhotoAssets = photoAssets ?? undefined;
+
+    const nextPhoto = nextPhotoAssets
+      ? user.isDemo || appEnv.usingDemoConfig
+        ? {
+            storagePath: `data:${nextPhotoAssets.mimeType};base64,${nextPhotoAssets.imageBase64}`,
+            thumbPath: `data:${nextPhotoAssets.mimeType};base64,${nextPhotoAssets.imageBase64}`,
+          }
+        : await uploadMealImages(user.uid, meal.id, nextPhotoAssets)
+      : patch.photo !== undefined
+        ? patch.photo
+        : meal.photo ?? null;
+
+    const nextMeal: MealRecord = {
+      ...meal,
+      ...mealPatch,
+      photo: nextPhoto,
+      servings: nextServings,
+      baseSnapshot: nextBaseSnapshot,
+      ...(shouldRecalculateNutrition
+        ? {
+            calories: nextScaledSnapshot!.calories,
+            macros: nextScaledSnapshot!.macros,
+            items: nextScaledSnapshot!.items,
+            percentOfDailySpend: computeDailyCoverage(
+              nextScaledSnapshot!.calories,
+              profile?.dailySpendKcal ?? null,
+            ),
+          }
+        : {}),
+      updatedAt: now,
+      savedFoodId: patch.savedFoodId ?? meal.savedFoodId ?? null,
+    };
+
+    if (user.isDemo || appEnv.usingDemoConfig) {
+      const nextSavedFoodId = nextMeal.savedFoodId ?? existingSavedFoodId;
+      const nextMeals = meals.map((currentMeal) => (currentMeal.id === meal.id ? nextMeal : currentMeal));
+      const nextSavedFoods = nextMeal.favorite && nextSavedFoodId
+        ? [
+            savedFoodFromMeal(
+              { ...nextMeal, savedFoodId: nextSavedFoodId },
+              savedFoods.find((item) => item.id === nextSavedFoodId),
+            ),
+            ...savedFoods.filter((savedFood) => savedFood.id !== nextSavedFoodId),
+          ]
+        : savedFoods.filter((savedFood) => savedFood.id !== existingSavedFoodId);
+
+      setMeals(nextMeals);
+      setSavedFoods(nextSavedFoods);
+      saveDemoData({
+        profile: profile ?? defaultProfileFromUser(user),
+        meals: nextMeals,
+        savedFoods: nextSavedFoods,
+      });
+      return;
+    }
+
+    await setDoc(doc(db, `users/${user.uid}/meals`, meal.id), nextMeal, { merge: true });
+
+    if (nextPhotoAssets && meal.photo) {
+      await deleteMealImages(meal.photo);
+    }
+
+    const nextSavedFoodId = nextMeal.savedFoodId ?? existingSavedFoodId;
+    if (nextMeal.favorite && nextSavedFoodId) {
+      await setDoc(
+        doc(db, `users/${user.uid}/savedFoods`, nextSavedFoodId),
+        savedFoodFromMeal(
+          { ...nextMeal, savedFoodId: nextSavedFoodId },
+          savedFoods.find((item) => item.id === nextSavedFoodId),
+        ),
+      );
+      return;
+    }
+
+    if (meal.favorite && existingSavedFoodId) {
+      await deleteDoc(doc(db, `users/${user.uid}/savedFoods`, existingSavedFoodId)).catch(() => undefined);
+    }
+  }
+
+  async function updateMealServings(meal: MealRecord, servings: number) {
+    if (!user) {
+      return;
+    }
+
+    const nextServings = Math.max(1, Math.round(servings));
+    const baseSnapshot = mealSnapshotFromMeal(meal);
+    const scaledSnapshot = scaleMealSnapshot(baseSnapshot, nextServings);
+    const now = new Date().toISOString();
+    const existingSavedFoodId = meal.savedFoodId ?? meal.id;
+    const nextMeal: MealRecord = {
+      ...meal,
+      servings: nextServings,
+      baseSnapshot,
+      calories: scaledSnapshot.calories,
+      macros: scaledSnapshot.macros,
+      items: scaledSnapshot.items,
+      percentOfDailySpend: computeDailyCoverage(scaledSnapshot.calories, profile?.dailySpendKcal ?? null),
+      updatedAt: now,
+    };
+
+    if (user.isDemo || appEnv.usingDemoConfig) {
+      const nextMeals = meals.map((currentMeal) => (currentMeal.id === meal.id ? nextMeal : currentMeal));
+      const nextSavedFoods = nextMeal.favorite && nextMeal.savedFoodId
+        ? [
+            savedFoodFromMeal(
+              nextMeal,
+              savedFoods.find((item) => item.id === nextMeal.savedFoodId),
+            ),
+            ...savedFoods.filter((savedFood) => savedFood.id !== nextMeal.savedFoodId),
+          ]
+        : savedFoods;
+
+      setMeals(nextMeals);
+      setSavedFoods(nextSavedFoods);
+      saveDemoData({
+        profile: profile ?? defaultProfileFromUser(user),
+        meals: nextMeals,
+        savedFoods: nextSavedFoods,
+      });
+      return;
+    }
+
+    await setDoc(doc(db, `users/${user.uid}/meals`, meal.id), nextMeal, { merge: true });
+
+    if (nextMeal.favorite && nextMeal.savedFoodId) {
+      await setDoc(
+        doc(db, `users/${user.uid}/savedFoods`, nextMeal.savedFoodId),
+        savedFoodFromMeal(
+          nextMeal,
+          savedFoods.find((item) => item.id === nextMeal.savedFoodId),
+        ),
+      );
+      return;
+    }
+
+    if (meal.favorite && existingSavedFoodId) {
+      await deleteDoc(doc(db, `users/${user.uid}/savedFoods`, existingSavedFoodId)).catch(() => undefined);
+    }
   }
 
   async function saveMeal(input: SaveMealInput) {
@@ -417,6 +788,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       return;
     }
 
+    const baseSnapshot = createMealSnapshot(input.estimate);
     if (user.isDemo || appEnv.usingDemoConfig) {
       const now = new Date().toISOString();
       const mealId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `meal-${Date.now()}`;
@@ -442,6 +814,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         percentOfDailySpend: computeDailyCoverage(input.estimate.calories, profile?.dailySpendKcal ?? null),
         favorite: Boolean(input.favorite),
         savedFoodId: input.favorite ? mealId : null,
+        servings: 1,
+        baseSnapshot,
       };
       const nextMeals = [mealData, ...meals];
       const nextSavedFoods = input.favorite
@@ -453,7 +827,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
               items: input.estimate.items,
               calories: input.estimate.calories,
               macros: input.estimate.macros,
-              defaultServingLabel: input.estimate.items[0]?.portion ?? "1 serving",
+              defaultServingLabel: input.estimate.items[0]?.portion ?? "1 Portion",
               usageCount: 0,
               lastUsedAt: now,
               linkedMealId: mealId,
@@ -499,6 +873,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       ),
       favorite,
       savedFoodId,
+      servings: 1,
+      baseSnapshot,
     };
 
     await setDoc(mealRef, mealData);
@@ -511,7 +887,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         items: input.estimate.items,
         calories: input.estimate.calories,
         macros: input.estimate.macros,
-        defaultServingLabel: input.estimate.items[0]?.portion ?? "1 serving",
+        defaultServingLabel: input.estimate.items[0]?.portion ?? "1 Portion",
         usageCount: 0,
         lastUsedAt: now,
         linkedMealId: mealRef.id,
@@ -547,7 +923,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
               items: meal.items,
               calories: meal.calories,
               macros: meal.macros,
-              defaultServingLabel: meal.items[0]?.portion ?? "1 serving",
+              defaultServingLabel: meal.items[0]?.portion ?? "1 Portion",
               usageCount: 0,
               lastUsedAt: now,
               linkedMealId: meal.id,
@@ -585,7 +961,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       items: meal.items,
       calories: meal.calories,
       macros: meal.macros,
-      defaultServingLabel: meal.items[0]?.portion ?? "1 serving",
+              defaultServingLabel: meal.items[0]?.portion ?? "1 Portion",
       usageCount: 0,
       lastUsedAt: new Date().toISOString(),
       linkedMealId: meal.id,
@@ -618,7 +994,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           calories: estimate.calories,
           macros: estimate.macros,
           confidence: estimate.confidence,
-          assumptions: [`Logged from ${savedFood.title} at x${multiplier}.`],
+          assumptions: [`Aus ${savedFood.title} mit Faktor x${multiplier} uebernommen.`],
           loggedAt: now,
           createdAt: now,
           updatedAt: now,
@@ -628,6 +1004,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           percentOfDailySpend: computeDailyCoverage(estimate.calories, profile?.dailySpendKcal ?? null),
           favorite: false,
           savedFoodId: null,
+          servings: 1,
+          baseSnapshot: createMealSnapshot(estimate),
         },
         ...meals,
       ];
@@ -663,7 +1041,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       calories: estimate.calories,
       macros: estimate.macros,
       confidence: estimate.confidence,
-      assumptions: [`Logged from ${savedFood.title} at x${multiplier}.`],
+      assumptions: [`Aus ${savedFood.title} mit Faktor x${multiplier} uebernommen.`],
       loggedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -673,6 +1051,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       percentOfDailySpend: computeDailyCoverage(estimate.calories, profile?.dailySpendKcal ?? null),
       favorite: false,
       savedFoodId: null,
+      servings: 1,
+      baseSnapshot: createMealSnapshot(estimate),
     });
 
     await updateDoc(doc(db, `users/${user.uid}/savedFoods`, savedFood.id), {
@@ -707,20 +1087,25 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     }
   }
 
+  const syncError = useMemo(() => getAppDataSyncError(appDataErrors), [appDataErrors]);
+
   const value = useMemo<AppDataContextValue>(
     () => ({
       profile,
       meals,
       savedFoods,
       loading,
+      syncError,
       saveProfile,
       saveThemePreference,
       saveMeal,
+      updateMeal,
+      updateMealServings,
       toggleMealFavorite,
       quickLogSavedFood,
       deleteMeal,
     }),
-    [loading, meals, profile, savedFoods],
+    [loading, meals, profile, savedFoods, syncError],
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

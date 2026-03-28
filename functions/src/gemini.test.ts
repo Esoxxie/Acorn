@@ -19,15 +19,15 @@ vi.mock("@google/genai", () => ({
 
 const baseInput = {
   mode: "manual_ai" as const,
-  manualText: "Chicken rice bowl",
+  manualText: "Hähnchen-Reis-Bowl",
 };
 
 const canonicalEstimate = {
-  mealTitle: "Chicken rice bowl",
-  summary: "Estimated nutrition for a chicken rice bowl.",
+  mealTitle: "Hähnchen-Reis-Bowl",
+  summary: "Geschätzte Nährwerte für eine Hähnchen-Reis-Bowl.",
   calories: 640,
   confidence: 84,
-  assumptions: ["Rice portion estimated from a standard bowl."],
+  assumptions: ["Die Reisportion wurde als normale Schüssel geschätzt."],
   macros: {
     protein: 39.2,
     carbs: 70.4,
@@ -37,7 +37,7 @@ const canonicalEstimate = {
   items: [
     {
       id: "chicken",
-      name: "Chicken",
+      name: "Hähnchen",
       portion: "150 g",
       calories: 280,
       macros: {
@@ -51,8 +51,8 @@ const canonicalEstimate = {
     },
     {
       id: "rice",
-      name: "Rice",
-      portion: "1 bowl",
+      name: "Reis",
+      portion: "1 Schüssel",
       calories: 360,
       macros: {
         protein: 6.8,
@@ -78,18 +78,18 @@ describe("Gemini meal estimate contract", () => {
 
   it("accepts the small compatibility alias set", () => {
     const estimate = normalizeEstimate({
-      title: "Chicken rice bowl",
-      description: "Estimated nutrition for a chicken rice bowl.",
+      title: "Hähnchen-Reis-Bowl",
+      description: "Geschätzte Nährwerte für eine Hähnchen-Reis-Bowl.",
       totalCalories: 640,
       confidence: 84,
-      assumptions: ["Rice portion estimated from a standard bowl."],
+      assumptions: ["Die Reisportion wurde als normale Schüssel geschätzt."],
       totalProtein: 39.2,
       totalCarbs: 70.4,
       totalFat: 18.1,
       totalFiber: 4.8,
       items: [
         {
-          title: "Chicken",
+          title: "Hähnchen",
           serving: "150 g",
           kcal: 280,
           protein: 32.4,
@@ -100,31 +100,31 @@ describe("Gemini meal estimate contract", () => {
       ],
       refinementQuestions: [
         {
-          question: "How much sauce was used?",
-          detail: "Sauce can change calories quite a bit.",
+          question: "Wie viel Sauce wurde verwendet?",
+          detail: "Sauce kann die Kalorien deutlich verändern.",
           options: [
-            { value: "light", detail: "Barely any sauce." },
-            { text: "Regular", detail: null },
+            { value: "light", detail: "Fast keine Sauce." },
+            { text: "Normal", detail: null },
           ],
         },
       ],
     });
 
-    expect(estimate.mealTitle).toBe("Chicken rice bowl");
-    expect(estimate.summary).toBe("Estimated nutrition for a chicken rice bowl.");
+    expect(estimate.mealTitle).toBe("Hähnchen-Reis-Bowl");
+    expect(estimate.summary).toBe("Geschätzte Nährwerte für eine Hähnchen-Reis-Bowl.");
     expect(estimate.items[0]).toMatchObject({
-      id: "chicken",
-      name: "Chicken",
+      id: "hahnchen",
+      name: "Hähnchen",
       portion: "150 g",
       calories: 280,
     });
     expect(estimate.refinementQuestions[0]).toEqual({
-      id: "how-much-sauce-was-used",
-      label: "How much sauce was used?",
-      helperText: "Sauce can change calories quite a bit.",
+      id: "wie-viel-sauce-wurde-verwendet",
+      label: "Wie viel Sauce wurde verwendet?",
+      helperText: "Sauce kann die Kalorien deutlich verändern.",
       options: [
-        { id: "light", label: "light", detail: "Barely any sauce." },
-        { id: "regular", label: "Regular", detail: null },
+        { id: "light", label: "light", detail: "Fast keine Sauce." },
+        { id: "normal", label: "Normal", detail: null },
       ],
     });
   });
@@ -140,7 +140,7 @@ describe("Gemini meal estimate contract", () => {
         items: canonicalEstimate.items,
         refinementQuestions: [],
       }),
-    ).toThrow("missing mealTitle");
+    ).toThrow("enthält kein mealTitle");
   });
 
   it("rejects invalid refinement question option counts", () => {
@@ -159,7 +159,44 @@ describe("Gemini meal estimate contract", () => {
     ).toThrow();
   });
 
-  it("sends a strict JSON schema to Gemini", async () => {
+  it("normalizes relaxed confidence values from Gemini", () => {
+    const estimate = normalizeEstimate({
+      ...canonicalEstimate,
+      confidence: 0.84,
+      items: [
+        {
+          ...canonicalEstimate.items[0],
+          confidence: 0.51,
+        },
+        canonicalEstimate.items[1],
+      ],
+    });
+
+    expect(estimate.confidence).toBe(84);
+    expect(estimate.items[0].confidence).toBe(51);
+  });
+
+  it("fails clearly when Gemini cannot recognize a food from the entry", () => {
+    expect(() =>
+      normalizeEstimate({
+        mealTitle: "Unklare Mahlzeit",
+        summary: "Die angegebene Beschreibung ist kein erkennbares Lebensmittel.",
+        calories: 0,
+        confidence: 0,
+        assumptions: ["Die Eingabe passt zu keinem bekannten Lebensmittel."],
+        macros: {
+          protein: 0,
+          carbs: 0,
+          fat: 0,
+          fiber: 0,
+        },
+        items: [],
+        refinementQuestions: [],
+      }),
+    ).toThrow("kein Lebensmittel erkennen");
+  });
+
+  it("sends a structural JSON schema to Gemini", async () => {
     generateContent.mockResolvedValue({
       text: JSON.stringify(canonicalEstimate),
     });
@@ -171,13 +208,16 @@ describe("Gemini meal estimate contract", () => {
     expect(request.config.responseMimeType).toBe("application/json");
     expect(request.config.responseJsonSchema).toBeTruthy();
     expect(request.config.responseJsonSchema.required).toContain("items");
-    expect(request.config.responseJsonSchema.properties.items.minItems).toBe(1);
+    expect(request.config.responseJsonSchema.properties.mealTitle.maxLength).toBeUndefined();
+    expect(request.config.responseJsonSchema.properties.calories.maximum).toBeUndefined();
+    expect(request.config.responseJsonSchema.properties.items.minItems).toBeUndefined();
     expect(request.config.responseJsonSchema.properties.macros.properties.fiber.type).toEqual(["number", "null"]);
     expect(request.config.responseJsonSchema.properties.items.items.properties.notes.type).toEqual(["string", "null"]);
     expect(request.config.responseJsonSchema.properties.refinementQuestions.items.properties.helperText.type).toEqual([
       "string",
       "null",
     ]);
+    expect(request.config.responseJsonSchema.properties.refinementQuestions.maxItems).toBeUndefined();
     expect(
       request.config.responseJsonSchema.properties.refinementQuestions.items.properties.options.items.properties.detail.type,
     ).toEqual(["string", "null"]);
@@ -188,7 +228,7 @@ describe("Gemini meal estimate contract", () => {
 
     await expect(
       runGeminiMealAnalysis(baseInput, { apiKey: "test-key", model: "gemini-2.5-flash" }),
-    ).rejects.toThrow("Gemini returned an empty response.");
+    ).rejects.toThrow("Gemini hat eine leere Antwort zurückgegeben.");
   });
 
   it("rejects malformed JSON responses and logs context", async () => {
@@ -197,10 +237,10 @@ describe("Gemini meal estimate contract", () => {
 
     await expect(
       runGeminiMealAnalysis(baseInput, { apiKey: "test-key", model: "gemini-2.5-flash" }),
-    ).rejects.toThrow("Gemini returned invalid JSON");
+    ).rejects.toThrow("Gemini hat ungültiges JSON zurückgegeben");
 
     expect(consoleError).toHaveBeenCalledWith(
-      "Gemini meal analysis response validation failed.",
+      "Die Antwort der Gemini-Mahlzeitenanalyse konnte nicht validiert werden.",
       expect.objectContaining({
         model: "gemini-2.5-flash",
         mode: "manual_ai",
@@ -213,7 +253,8 @@ describe("Gemini meal estimate contract", () => {
   it("builds a prompt that names the exact contract fields", () => {
     const prompt = buildPrompt(baseInput);
 
+    expect(prompt).toContain("Du bist Acorn");
     expect(prompt).toContain("mealTitle, summary, calories, confidence, assumptions, macros, items, refinementQuestions");
-    expect(prompt).toContain("Do not emit alternate field names");
+    expect(prompt).toContain("Gib keine alternativen Feldnamen");
   });
 });

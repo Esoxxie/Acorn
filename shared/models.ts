@@ -49,6 +49,12 @@ export type MealEstimate = {
   refinementQuestions: RefinementQuestion[];
 };
 
+export type MealSnapshot = {
+  calories: number;
+  macros: MacroSnapshot;
+  items: EstimateItem[];
+};
+
 export type AnalyzeEntryMode = "photo" | "manual_ai";
 
 export type AnalyzeEntryInput = {
@@ -102,6 +108,8 @@ export type MealRecord = {
   percentOfDailySpend: number;
   favorite: boolean;
   savedFoodId?: string | null;
+  servings?: number;
+  baseSnapshot?: MealSnapshot | null;
 };
 
 export type SavedFood = {

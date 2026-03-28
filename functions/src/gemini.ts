@@ -13,86 +13,66 @@ const nullableStringJsonSchema = {
 const macroJsonSchema = {
   type: "object",
   additionalProperties: false,
-  propertyOrdering: ["protein", "carbs", "fat", "fiber"],
   required: ["protein", "carbs", "fat", "fiber"],
   properties: {
-    protein: { type: "number", minimum: 0, maximum: 500 },
-    carbs: { type: "number", minimum: 0, maximum: 500 },
-    fat: { type: "number", minimum: 0, maximum: 300 },
-    fiber: { ...nullableNumberJsonSchema, minimum: 0, maximum: 200 },
+    protein: { type: "number" },
+    carbs: { type: "number" },
+    fat: { type: "number" },
+    fiber: nullableNumberJsonSchema,
   },
 } as const;
 
 const geminiResponseJsonSchema = {
   type: "object",
   additionalProperties: false,
-  propertyOrdering: [
-    "mealTitle",
-    "summary",
-    "calories",
-    "confidence",
-    "assumptions",
-    "macros",
-    "items",
-    "refinementQuestions",
-  ],
   required: ["mealTitle", "summary", "calories", "confidence", "assumptions", "macros", "items", "refinementQuestions"],
   properties: {
-    mealTitle: { type: "string", minLength: 1, maxLength: 80 },
-    summary: { type: "string", minLength: 1, maxLength: 220 },
-    calories: { type: "number", minimum: 0, maximum: 6000 },
-    confidence: { type: "number", minimum: 1, maximum: 99 },
+    mealTitle: { type: "string" },
+    summary: { type: "string" },
+    calories: { type: "number" },
+    confidence: { type: "number" },
     assumptions: {
       type: "array",
-      maxItems: 4,
-      items: { type: "string", minLength: 1, maxLength: 160 },
+      items: { type: "string" },
     },
     macros: macroJsonSchema,
     items: {
       type: "array",
-      minItems: 1,
-      maxItems: 8,
       items: {
         type: "object",
         additionalProperties: false,
-        propertyOrdering: ["id", "name", "portion", "calories", "macros", "confidence", "notes"],
         required: ["id", "name", "portion", "calories", "macros"],
         properties: {
-          id: { type: "string", minLength: 1, maxLength: 60 },
-          name: { type: "string", minLength: 1, maxLength: 80 },
-          portion: { type: "string", minLength: 1, maxLength: 80 },
-          calories: { type: "number", minimum: 0, maximum: 4000 },
+          id: { type: "string" },
+          name: { type: "string" },
+          portion: { type: "string" },
+          calories: { type: "number" },
           macros: macroJsonSchema,
-          confidence: { ...nullableNumberJsonSchema, minimum: 1, maximum: 99 },
-          notes: { ...nullableStringJsonSchema, maxLength: 160 },
+          confidence: nullableNumberJsonSchema,
+          notes: nullableStringJsonSchema,
         },
       },
     },
     refinementQuestions: {
       type: "array",
-      maxItems: 3,
       items: {
         type: "object",
         additionalProperties: false,
-        propertyOrdering: ["id", "label", "helperText", "options"],
         required: ["id", "label", "helperText", "options"],
         properties: {
-          id: { type: "string", minLength: 1, maxLength: 60 },
-          label: { type: "string", minLength: 1, maxLength: 120 },
-          helperText: { ...nullableStringJsonSchema, maxLength: 160 },
+          id: { type: "string" },
+          label: { type: "string" },
+          helperText: nullableStringJsonSchema,
           options: {
             type: "array",
-            minItems: 2,
-            maxItems: 4,
             items: {
               type: "object",
               additionalProperties: false,
-              propertyOrdering: ["id", "label", "detail"],
               required: ["id", "label", "detail"],
               properties: {
-                id: { type: "string", minLength: 1, maxLength: 60 },
-                label: { type: "string", minLength: 1, maxLength: 80 },
-                detail: { ...nullableStringJsonSchema, maxLength: 120 },
+                id: { type: "string" },
+                label: { type: "string" },
+                detail: nullableStringJsonSchema,
               },
             },
           },
@@ -123,7 +103,7 @@ const compatibilityEstimateSchema = z.object({
   description: z.string().min(1).max(220).optional(),
   calories: z.number().min(0).max(6000).optional(),
   totalCalories: z.number().min(0).max(6000).optional(),
-  confidence: z.number().min(1).max(99),
+  confidence: z.number().min(0).max(100),
   macros: rawMacroSchema.optional(),
   totalProtein: z.number().min(0).max(500).optional(),
   totalCarbs: z.number().min(0).max(500).optional(),
@@ -145,11 +125,10 @@ const compatibilityEstimateSchema = z.object({
         carbs: z.number().min(0).max(500).optional(),
         fat: z.number().min(0).max(300).optional(),
         fiber: z.number().min(0).max(200).nullable().optional(),
-        confidence: z.number().min(1).max(99).nullable().optional(),
+        confidence: z.number().min(0).max(100).nullable().optional(),
         notes: z.string().max(160).nullable().optional(),
       }),
     )
-    .min(1)
     .max(8),
   refinementQuestions: z
     .array(
@@ -224,6 +203,9 @@ const estimateSchema = z.object({
 
 function slugify(value: string, index: number) {
   const slug = value
+    .normalize("NFKD")
+    .replace(/ß/g, "ss")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
@@ -257,12 +239,29 @@ function normalizeMacros(raw: {
   };
 }
 
+function normalizeConfidenceValue(value: number): number {
+  const scaled = value > 0 && value <= 1 ? value * 100 : value;
+  return Math.max(1, Math.min(99, Math.round(scaled)));
+}
+
+function normalizeOptionalConfidenceValue(value: number | null | undefined) {
+  if (value == null) {
+    return value;
+  }
+
+  return normalizeConfidenceValue(value);
+}
+
+function createUnrecognizedFoodError() {
+  return new Error("Die Schätzung konnte aus diesem Eintrag kein Lebensmittel erkennen.");
+}
+
 function parseGeminiJsonResponse(rawText: string): unknown {
   try {
     return JSON.parse(rawText);
   } catch (error) {
     throw new Error(
-      `Gemini returned invalid JSON: ${error instanceof Error ? error.message : "unknown parse error"}.`,
+      `Gemini hat ungültiges JSON zurückgegeben: ${error instanceof Error ? error.message : "unbekannter Analysefehler"}.`,
     );
   }
 }
@@ -272,28 +271,32 @@ function coerceCompatibilityEstimate(raw: unknown): z.infer<typeof estimateSchem
   const mealTitle = pickFirstString(parsed.mealTitle, parsed.title);
 
   if (!mealTitle) {
-    throw new Error("Gemini response is missing mealTitle.");
+    throw new Error("Die Gemini-Antwort enthält kein mealTitle.");
   }
 
   const summary = pickFirstString(parsed.summary, parsed.description);
   if (!summary) {
-    throw new Error("Gemini response is missing summary.");
+    throw new Error("Die Gemini-Antwort enthält keine summary.");
+  }
+
+  if (parsed.items.length === 0) {
+    throw createUnrecognizedFoodError();
   }
 
   const items = parsed.items.map((item, index) => {
     const name = pickFirstString(item.name, item.title);
     if (!name) {
-      throw new Error(`Gemini response item ${index + 1} is missing name.`);
+      throw new Error(`Die Gemini-Antwort enthält bei Position ${index + 1} keinen Namen.`);
     }
 
     const portion = pickFirstString(item.portion, item.serving);
     if (!portion) {
-      throw new Error(`Gemini response item ${index + 1} is missing portion.`);
+      throw new Error(`Die Gemini-Antwort enthält bei Position ${index + 1} keine Portionsangabe.`);
     }
 
     const calories = item.calories ?? item.kcal;
     if (typeof calories !== "number") {
-      throw new Error(`Gemini response item ${index + 1} is missing calories.`);
+      throw new Error(`Die Gemini-Antwort enthält bei Position ${index + 1} keine Kalorien.`);
     }
 
     return {
@@ -307,7 +310,7 @@ function coerceCompatibilityEstimate(raw: unknown): z.infer<typeof estimateSchem
         fat: item.macros?.fat ?? item.fat,
         fiber: item.macros?.fiber ?? item.fiber,
       }),
-      confidence: item.confidence ?? null,
+      confidence: normalizeOptionalConfidenceValue(item.confidence ?? null),
       notes: item.notes ?? null,
     };
   });
@@ -321,7 +324,7 @@ function coerceCompatibilityEstimate(raw: unknown): z.infer<typeof estimateSchem
   });
   const caloriesSource = parsed.calories ?? parsed.totalCalories;
   if (typeof caloriesSource !== "number" && fallbackCalories <= 0) {
-    throw new Error("Gemini response is missing calories.");
+    throw new Error("Die Gemini-Antwort enthält keine Kalorien.");
   }
   const calories = pickMeaningfulNumber(caloriesSource, fallbackCalories);
   const macros = normalizeMacros({
@@ -332,7 +335,7 @@ function coerceCompatibilityEstimate(raw: unknown): z.infer<typeof estimateSchem
   });
   const refinementQuestions =
     parsed.refinementQuestions.map((question, questionIndex) => {
-      const label = pickFirstString(question.label, question.question) ?? `Question ${questionIndex + 1}`;
+      const label = pickFirstString(question.label, question.question) ?? `Frage ${questionIndex + 1}`;
       return {
         id: question.id || slugify(label, questionIndex),
         label,
@@ -360,7 +363,7 @@ function coerceCompatibilityEstimate(raw: unknown): z.infer<typeof estimateSchem
     mealTitle,
     summary,
     calories,
-    confidence: parsed.confidence,
+    confidence: normalizeConfidenceValue(parsed.confidence),
     assumptions: parsed.assumptions,
     macros,
     items,
@@ -372,10 +375,14 @@ export function normalizeEstimate(raw: unknown): MealEstimate {
   const canonicalResult = estimateSchema.safeParse(raw);
   const parsed = canonicalResult.success ? canonicalResult.data : coerceCompatibilityEstimate(raw);
 
+  if (parsed.items.length === 0 && parsed.calories <= 0) {
+    throw createUnrecognizedFoodError();
+  }
+
   return {
     ...parsed,
     calories: Math.round(parsed.calories),
-    confidence: Math.max(1, Math.min(99, Math.round(parsed.confidence))),
+    confidence: normalizeConfidenceValue(parsed.confidence),
     macros: {
       protein: Math.round(parsed.macros.protein * 10) / 10,
       carbs: Math.round(parsed.macros.carbs * 10) / 10,
@@ -386,6 +393,7 @@ export function normalizeEstimate(raw: unknown): MealEstimate {
       ...item,
       id: item.id || slugify(item.name, index),
       calories: Math.round(item.calories),
+      confidence: normalizeOptionalConfidenceValue(item.confidence),
       macros: {
         protein: Math.round(item.macros.protein * 10) / 10,
         carbs: Math.round(item.macros.carbs * 10) / 10,
@@ -399,40 +407,40 @@ export function normalizeEstimate(raw: unknown): MealEstimate {
 export function buildPrompt(input: AnalyzeEntryInput) {
   const modeInstructions =
     input.mode === "photo"
-      ? "Estimate nutrition from the food photo. Respect any user-provided context if it reasonably clarifies the image."
-      : "Estimate nutrition from the user's typed food description. Do not invent extra dishes beyond what is likely implied.";
+      ? "Schätze Nährwerte anhand des Essensfotos. Berücksichtige jeden vom Nutzer gelieferten Kontext, wenn er das Bild sinnvoll präzisiert."
+      : "Schätze Nährwerte anhand der getippten Lebensmittelsbeschreibung. Erfinde keine zusätzlichen Gerichte, die nicht plausibel angedeutet sind.";
 
   const contextBlock = input.userContext
-    ? `User context: ${input.userContext.trim()}`
-    : "User context: none";
+    ? `Nutzerkontext: ${input.userContext.trim()}`
+    : "Nutzerkontext: keiner";
 
   const refinementBlock =
     input.priorEstimate && input.refinementAnswers
-      ? `This is a refinement request.\nPrior estimate JSON: ${JSON.stringify(input.priorEstimate)}\nSelected answers: ${JSON.stringify(input.refinementAnswers)}`
-      : "This is an initial estimate request.";
+      ? `Dies ist eine Verfeinerungsanfrage.\nJSON der vorherigen Schätzung: ${JSON.stringify(input.priorEstimate)}\nAusgewählte Antworten: ${JSON.stringify(input.refinementAnswers)}`
+      : "Dies ist eine erste Schätzanfrage.";
 
   const mealText =
     input.mode === "manual_ai"
-      ? `Manual description: ${input.manualText?.trim() ?? ""}`
-      : "Photo input is attached as inline image data.";
+      ? `Manuelle Beschreibung: ${input.manualText?.trim() ?? ""}`
+      : "Das Foto wurde als eingebettete Bilddaten angehängt.";
 
   return [
-    "You are Acorn, a careful calorie and macro estimator for a photo-first mobile app.",
+    "Du bist Acorn, ein sorgfältiger Kalorien- und Makroschätzer für eine mobile App mit Fokus auf Fotos.",
     modeInstructions,
     mealText,
     contextBlock,
     refinementBlock,
-    "Return JSON only with no markdown fences.",
-    "Return exactly these top-level fields and do not rename them: mealTitle, summary, calories, confidence, assumptions, macros, items, refinementQuestions.",
-    "mealTitle must be short and natural. summary must be exactly 1 concise sentence.",
-    "macros must always include protein, carbs, fat, and fiber. Use grams for macros.",
-    "Every item must include id, name, portion, calories, and macros.",
-    "Use stable slug-like ids such as grilled-chicken, extra-sauce, portion-large, or dressing-on-side.",
-    "Assumptions must be brief, honest, and specific. Use an empty array when there are no important assumptions.",
-    "If there is meaningful uncertainty that would materially change calories or macros, generate 1 to 3 refinementQuestions with 2 to 4 tap-friendly options each.",
-    "If there is not meaningful uncertainty, return refinementQuestions as an empty array.",
-    "If this is already a refinement request, update the estimate using the selected answers and only keep leftover refinementQuestions if they still matter.",
-    "Do not emit alternate field names like title, description, totalCalories, serving, kcal, question, text, or value.",
+    "Gib ausschließlich JSON zurück, ohne Markdown-Codeblöcke oder Erklärtext.",
+    "Gib exakt diese Top-Level-Felder zurück und benenne sie nicht um: mealTitle, summary, calories, confidence, assumptions, macros, items, refinementQuestions.",
+    "mealTitle muss kurz und natürlich sein. summary muss genau ein knapper Satz sein.",
+    "macros müssen immer protein, carbs, fat und fiber enthalten. Verwende Gramm für alle Makros.",
+    "Jeder Eintrag muss id, name, portion, calories und macros enthalten.",
+    "Verwende stabile, slugartige ids wie gegrilltes-haehnchen, extra-sauce, portion-gross oder dressing-separat.",
+    "assumptions müssen kurz, ehrlich und konkret sein. Nutze ein leeres Array, wenn es keine wichtigen Annahmen gibt.",
+    "Wenn es eine relevante Unsicherheit gibt, die Kalorien oder Makros spürbar verändern würde, erstelle 1 bis 3 refinementQuestions mit jeweils 2 bis 4 gut antippbaren Optionen.",
+    "Wenn es keine relevante Unsicherheit gibt, gib refinementQuestions als leeres Array zurück.",
+    "Wenn dies bereits eine Verfeinerungsanfrage ist, aktualisiere die Schätzung anhand der ausgewählten Antworten und behalte nur solche restlichen refinementQuestions, die noch wichtig sind.",
+    "Gib keine alternativen Feldnamen wie title, description, totalCalories, serving, kcal, question, text oder value aus.",
   ].join("\n");
 }
 
@@ -441,7 +449,7 @@ export async function runGeminiMealAnalysis(
   config: { apiKey: string; model: string },
 ): Promise<MealEstimate> {
   if (!config.apiKey) {
-    throw new Error("Missing Gemini API key.");
+    throw new Error("Fehlender Gemini-API-Schlüssel.");
   }
 
   const client = new GoogleGenAI({ apiKey: config.apiKey });
@@ -458,24 +466,40 @@ export async function runGeminiMealAnalysis(
     });
   }
 
-  const response = await client.models.generateContent({
-    model: config.model,
-    contents: [{ role: "user", parts }],
-    config: {
-      temperature: 0.35,
-      responseMimeType: "application/json",
-      responseJsonSchema: geminiResponseJsonSchema,
-    },
-  });
+  let response;
+
+  try {
+    response = await client.models.generateContent({
+      model: config.model,
+      contents: [{ role: "user", parts }],
+      config: {
+        temperature: 0.35,
+        responseMimeType: "application/json",
+        responseJsonSchema: geminiResponseJsonSchema,
+      },
+    });
+  } catch (error) {
+    console.error("Gemini-Mahlzeitenanalyse fehlgeschlagen.", {
+      model: config.model,
+      mode: input.mode,
+      hasPriorEstimate: Boolean(input.priorEstimate),
+      error: error instanceof Error ? error.message : String(error),
+      status:
+        typeof error === "object" && error !== null && "status" in error
+          ? (error as { status?: unknown }).status
+          : null,
+    });
+    throw error;
+  }
 
   if (!response.text) {
-    throw new Error("Gemini returned an empty response.");
+    throw new Error("Gemini hat eine leere Antwort zurückgegeben.");
   }
 
   try {
     return normalizeEstimate(parseGeminiJsonResponse(response.text));
   } catch (error) {
-    console.error("Gemini meal analysis response validation failed.", {
+    console.error("Die Antwort der Gemini-Mahlzeitenanalyse konnte nicht validiert werden.", {
       model: config.model,
       mode: input.mode,
       hasPriorEstimate: Boolean(input.priorEstimate),

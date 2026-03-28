@@ -8,6 +8,7 @@ import { AuthPage } from "../routes/AuthPage";
 import { LibraryPage } from "../routes/LibraryPage";
 import { ProfilePage } from "../routes/ProfilePage";
 import { TodayPage } from "../routes/TodayPage";
+import { uiCopy } from "../lib/copy";
 import { applyThemePreference, getStoredThemePreference, setStoredThemePreference } from "../lib/theme";
 
 function LoadingScreen() {
@@ -22,12 +23,19 @@ function LoadingScreen() {
 
 function AppShell() {
   const { openLogFlow } = useLogFlow();
+  const { syncError } = useAppData();
 
   return (
     <div className="shell">
       <header className="topbar">
         <AcornLogo compact />
+        <button className="pill-button topbar__add-button" onClick={openLogFlow} type="button">
+          <Plus size={16} />
+          {uiCopy.nav.add}
+        </button>
       </header>
+
+      {syncError ? <div className="inline-error">{syncError}</div> : null}
 
       <main className="shell__main">
         <Routes>
@@ -40,21 +48,21 @@ function AppShell() {
 
       <button className="floating-log-button" onClick={openLogFlow} type="button">
         <Plus size={18} />
-        Add
+        {uiCopy.nav.add}
       </button>
 
       <nav className="bottom-nav">
         <NavLink className={({ isActive }) => `bottom-nav__item ${isActive ? "is-active" : ""}`} end to="/">
           <Camera size={18} />
-          <span>Today</span>
+          <span>{uiCopy.nav.today}</span>
         </NavLink>
         <NavLink className={({ isActive }) => `bottom-nav__item ${isActive ? "is-active" : ""}`} to="/library">
           <Library size={18} />
-          <span>Library</span>
+          <span>{uiCopy.nav.library}</span>
         </NavLink>
         <NavLink className={({ isActive }) => `bottom-nav__item ${isActive ? "is-active" : ""}`} to="/profile">
           <UserRound size={18} />
-          <span>Profile</span>
+          <span>{uiCopy.nav.profile}</span>
         </NavLink>
       </nav>
     </div>
@@ -85,7 +93,7 @@ function RoutedApp() {
   }
 
   return (
-    <AppDataProvider>
+    <AppDataProvider key={user.uid}>
       <ThemeSync />
       <LogFlowProvider>
         <AppShell />

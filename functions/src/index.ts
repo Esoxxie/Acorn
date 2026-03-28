@@ -2,8 +2,8 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
-import { z } from "zod";
 import type { AnalyzeEntryInput } from "../../shared/models";
+import { analyzeEntryInputSchema, normalizeAnalyzeEntryInput } from "../../shared/analyze-entry-input";
 import { runGeminiMealAnalysis } from "./gemini";
 
 if (!getApps().length) {
@@ -15,41 +15,38 @@ const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 const GEMINI_MODEL = defineString("GEMINI_MODEL", { default: "gemini-2.5-flash" });
 const MAX_DAILY_AI_CALLS = defineString("MAX_DAILY_AI_CALLS", { default: "30" });
 
-const inputSchema = z
-  .object({
-    mode: z.enum(["photo", "manual_ai"]),
-    imageBase64: z.string().optional(),
-    mimeType: z.string().optional(),
-    manualText: z.string().max(500).optional(),
-    userContext: z.string().max(500).optional(),
-    priorEstimate: z.unknown().optional(),
-    refinementAnswers: z.record(z.string(), z.string()).optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.mode === "photo" && !value.imageBase64) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["imageBase64"],
-        message: "A photo payload is required for photo mode.",
-      });
-    }
+function getUserSafeAnalyzeErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
 
-    if (value.mode === "photo" && !value.mimeType) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["mimeType"],
-        message: "A mime type is required for photo mode.",
-      });
-    }
+  if (
+    message.includes("could not recognize a food") ||
+    message.includes("couldn't recognize a food") ||
+    message.includes("kein lebensmittel erkennen") ||
+    (message.includes("\"items\"") && message.includes("too_small"))
+  ) {
+    return "Wir konnten aus diesem Eintrag kein Lebensmittel erkennen. Nenne das Gericht oder ein paar Zutaten genauer.";
+  }
 
-    if (value.mode === "manual_ai" && !value.manualText && !value.priorEstimate) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["manualText"],
-        message: "A description is required for manual mode.",
-      });
-    }
-  });
+  if (message.includes("too many states") || (message.includes("invalid_argument") && message.includes("schema"))) {
+    return "Der Schaetzer hat unser Antwortformat abgelehnt. Bitte versuche es gleich noch einmal.";
+  }
+
+  if (message.includes("empty response") || message.includes("leere antwort")) {
+    return "Der Schaetzer hat ein leeres Ergebnis geliefert. Bitte versuche es erneut.";
+  }
+
+  if (
+    message.includes("invalid json") ||
+    message.includes("missing mealtitle") ||
+    message.includes("missing summary") ||
+    message.includes("missing calories") ||
+    message.includes("validation")
+  ) {
+    return "Der Schaetzer hat ein unlesbares Ergebnis geliefert. Bitte versuche es erneut.";
+  }
+
+  return "Die Mahlzeit konnte gerade nicht analysiert werden. Bitte versuche es erneut.";
+}
 
 async function consumeDailyUsage(uid: string, limit: number) {
   const dayKey = new Date().toISOString().slice(0, 10);
@@ -84,31 +81,30 @@ export const analyzeEntry = onCall(
     region: "europe-west3",
     timeoutSeconds: 60,
     memory: "512MiB",
+    cors: true,
+    invoker: "public",
     secrets: [GEMINI_API_KEY],
   },
   async (request) => {
     if (!request.auth?.uid) {
-      throw new HttpsError("unauthenticated", "Sign in before requesting an estimate.");
+      throw new HttpsError("unauthenticated", "Melde dich an, bevor du eine Schaetzung anforderst.");
     }
 
-    const parsedInput = inputSchema.safeParse(request.data);
+    const parsedInput = analyzeEntryInputSchema.safeParse(request.data);
     if (!parsedInput.success) {
-      throw new HttpsError("invalid-argument", parsedInput.error.issues[0]?.message ?? "Invalid input.");
+      throw new HttpsError("invalid-argument", parsedInput.error.issues[0]?.message ?? "Ungueltige Eingabe.");
     }
 
     const apiKey = GEMINI_API_KEY.value() || process.env.GEMINI_API_KEY || "";
     if (!apiKey) {
-      throw new HttpsError("failed-precondition", "Gemini API key is not configured.");
+      throw new HttpsError("failed-precondition", "Der Gemini-API-Schluessel ist nicht konfiguriert.");
     }
 
     const limit = Number(MAX_DAILY_AI_CALLS.value() || process.env.MAX_DAILY_AI_CALLS || "30");
     await consumeDailyUsage(request.auth.uid, limit);
 
     try {
-      const normalizedInput: AnalyzeEntryInput = {
-        ...parsedInput.data,
-        priorEstimate: parsedInput.data.priorEstimate as AnalyzeEntryInput["priorEstimate"],
-      };
+      const normalizedInput: AnalyzeEntryInput = normalizeAnalyzeEntryInput(parsedInput.data);
 
       return await runGeminiMealAnalysis(normalizedInput, {
         apiKey,
@@ -121,7 +117,8 @@ export const analyzeEntry = onCall(
 
       throw new HttpsError(
         "internal",
-        error instanceof Error ? error.message : "Could not analyze the meal.",
+        "Die Mahlzeit konnte nicht analysiert werden.",
+        { message: getUserSafeAnalyzeErrorMessage(error) },
       );
     }
   },

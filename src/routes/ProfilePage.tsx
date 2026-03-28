@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ActivityLevel, BiologicalSex, ThemePreference, UnitSystem, UserProfile } from "../../shared/models";
 import { useAppData, useAuth } from "../app/contexts";
+import { uiCopy } from "../lib/copy";
 import { formatCalories } from "../lib/format";
+import { usePwaUpdateState } from "../lib/pwa-update";
 
 type ProfileFormState = {
   units: UnitSystem;
@@ -14,11 +16,11 @@ type ProfileFormState = {
 };
 
 const activityLabels: Record<ActivityLevel, string> = {
-  sedentary: "Sedentary",
-  light: "Lightly active",
-  moderate: "Moderately active",
-  active: "Active",
-  very_active: "Very active",
+  sedentary: "Sitzend",
+  light: "Leicht aktiv",
+  moderate: "Moderat aktiv",
+  active: "Aktiv",
+  very_active: "Sehr aktiv",
 };
 
 function toFormState(profile: UserProfile | null): ProfileFormState {
@@ -46,8 +48,9 @@ function toFormState(profile: UserProfile | null): ProfileFormState {
 }
 
 export function ProfilePage() {
-  const { profile, saveProfile } = useAppData();
+  const { profile, saveProfile, loading, syncError } = useAppData();
   const { signOutUser, user } = useAuth();
+  const { checking, updateAvailable, message, checkForUpdate, applyUpdate } = usePwaUpdateState();
   const [formState, setFormState] = useState<ProfileFormState>(toFormState(profile));
   const [status, setStatus] = useState<string | null>(null);
 
@@ -55,8 +58,17 @@ export function ProfilePage() {
     setFormState(toFormState(profile));
   }, [profile]);
 
+  const updateStatus = useMemo(() => {
+    if (updateAvailable) {
+      return uiCopy.profile.updateAvailable;
+    }
+
+    return message ?? uiCopy.profile.updateCurrent;
+  }, [message, updateAvailable]);
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setStatus(null);
     const heightValue = Number(formState.height);
     const weightValue = Number(formState.weight);
     const nextProfile: UserProfile = {
@@ -82,42 +94,105 @@ export function ProfilePage() {
       updatedAt: profile?.updatedAt ?? null,
     };
 
-    await saveProfile(nextProfile);
-    setStatus("Profile saved.");
-    window.setTimeout(() => setStatus(null), 3000);
+    try {
+      await saveProfile(nextProfile);
+      setStatus(uiCopy.profile.saved);
+      window.setTimeout(() => setStatus(null), 3000);
+    } catch {
+      setStatus(null);
+    }
+  }
+
+  if (loading && !profile) {
+    return (
+      <div className="page-stack">
+        <section className="section-card">
+          <div className="section-card__header">
+            <h1>Profil</h1>
+            <p>{uiCopy.profile.loadingSaved}</p>
+          </div>
+          <div className="empty-state">{uiCopy.profile.loading}</div>
+        </section>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="page-stack">
+        <section className="section-card">
+          <div className="section-card__header">
+            <h1>Profil</h1>
+            <p>{uiCopy.profile.missing}</p>
+          </div>
+          <div className="inline-error">
+            {syncError ?? uiCopy.profile.syncLag}
+          </div>
+          <div className="sheet__actions">
+            <button className="secondary-button" onClick={() => void signOutUser()} type="button">
+              {uiCopy.profile.signOut}
+            </button>
+          </div>
+        </section>
+      </div>
+    );
   }
 
   return (
     <div className="page-stack">
       <section className="section-card">
         <div className="section-card__header">
-          <h1>Profile</h1>
+          <h1>Profil</h1>
+          <p>{uiCopy.profile.intro}</p>
         </div>
+
         <div className="stats-grid">
           <article className="stat-card">
-            <span>Daily</span>
-            <strong>{profile?.dailySpendKcal ? formatCalories(profile.dailySpendKcal) : "Incomplete"}</strong>
+            <span>{uiCopy.profile.dailyTarget}</span>
+            <strong>{profile.dailySpendKcal ? formatCalories(profile.dailySpendKcal) : uiCopy.profile.incomplete}</strong>
             <p>
-              {profile?.dailySpendKcal
-                ? "Estimated spend"
-                : "Add age, sex, height, weight, and activity to calculate TDEE"}
+              {profile.dailySpendKcal
+                ? uiCopy.profile.calculatedFromProfile
+                : uiCopy.profile.completeProfileHint}
             </p>
           </article>
           <article className="stat-card">
-            <span>Account</span>
+            <span>{uiCopy.profile.account}</span>
             <strong>{user?.displayName ?? "Acorn"}</strong>
-            <p>{user?.email ?? ""}</p>
+            <p>{user?.email ?? "Lokale Demo"}</p>
           </article>
+        </div>
+      </section>
+
+      <section className="section-card">
+        <div className="section-card__header">
+          <h2>{uiCopy.profile.app}</h2>
+          <p>{uiCopy.profile.updateHint}</p>
+        </div>
+        <div className="stat-card">
+          <span>{uiCopy.profile.updates}</span>
+          <strong>{updateStatus}</strong>
+          <p>{updateAvailable ? uiCopy.profile.updateReloadHint : uiCopy.profile.updateManualHint}</p>
+        </div>
+        <div className="sheet__actions">
+          <button className="secondary-button" disabled={checking} onClick={() => void checkForUpdate()} type="button">
+            {checking ? uiCopy.profile.checkingUpdates : uiCopy.profile.checkUpdates}
+          </button>
+          {updateAvailable ? (
+            <button className="primary-button" onClick={() => void applyUpdate()} type="button">
+              {uiCopy.profile.reload}
+            </button>
+          ) : null}
         </div>
       </section>
 
       <form className="section-card form-grid" onSubmit={handleSubmit}>
         <div className="section-card__header">
-          <h2>Details</h2>
+          <h2>{uiCopy.profile.settings}</h2>
         </div>
 
         <label>
-          Theme
+          {uiCopy.profile.appearance}
           <select
             onChange={(event) =>
               setFormState((current) => ({
@@ -128,13 +203,13 @@ export function ProfilePage() {
             value={formState.themePreference}
           >
             <option value="system">System</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
+            <option value="light">Hell</option>
+            <option value="dark">Dunkel</option>
           </select>
         </label>
 
         <label>
-          Units
+          {uiCopy.profile.units}
           <select
             onChange={(event) =>
               setFormState((current) => ({
@@ -144,13 +219,13 @@ export function ProfilePage() {
             }
             value={formState.units}
           >
-            <option value="metric">Metric</option>
-            <option value="imperial">Imperial</option>
+            <option value="metric">{uiCopy.profile.metric}</option>
+            <option value="imperial">{uiCopy.profile.imperial}</option>
           </select>
         </label>
 
         <label>
-          Age
+          {uiCopy.profile.age}
           <input
             inputMode="numeric"
             onChange={(event) => setFormState((current) => ({ ...current, age: event.target.value }))}
@@ -161,7 +236,7 @@ export function ProfilePage() {
         </label>
 
         <label>
-          Sex
+          {uiCopy.profile.sex}
           <select
             onChange={(event) =>
               setFormState((current) => ({
@@ -171,14 +246,14 @@ export function ProfilePage() {
             }
             value={formState.sex}
           >
-            <option value="">Select</option>
-            <option value="female">Female</option>
-            <option value="male">Male</option>
+            <option value="">{uiCopy.profile.select}</option>
+            <option value="female">{uiCopy.profile.female}</option>
+            <option value="male">{uiCopy.profile.male}</option>
           </select>
         </label>
 
         <label>
-          Height ({formState.units === "metric" ? "cm" : "in"})
+          {uiCopy.profile.height} ({formState.units === "metric" ? "cm" : "in"})
           <input
             inputMode="decimal"
             onChange={(event) => setFormState((current) => ({ ...current, height: event.target.value }))}
@@ -189,7 +264,7 @@ export function ProfilePage() {
         </label>
 
         <label>
-          Weight ({formState.units === "metric" ? "kg" : "lb"})
+          {uiCopy.profile.weight} ({formState.units === "metric" ? "kg" : "lb"})
           <input
             inputMode="decimal"
             onChange={(event) => setFormState((current) => ({ ...current, weight: event.target.value }))}
@@ -200,7 +275,7 @@ export function ProfilePage() {
         </label>
 
         <label>
-          Activity level
+          {uiCopy.profile.activity}
           <select
             onChange={(event) =>
               setFormState((current) => ({
@@ -210,7 +285,7 @@ export function ProfilePage() {
             }
             value={formState.activityLevel}
           >
-            <option value="">Select</option>
+            <option value="">{uiCopy.profile.select}</option>
             {Object.entries(activityLabels).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
@@ -221,10 +296,10 @@ export function ProfilePage() {
 
         <div className="sheet__actions">
           <button className="primary-button" type="submit">
-            Save profile
+            {uiCopy.profile.save}
           </button>
           <button className="secondary-button" onClick={() => void signOutUser()} type="button">
-            Sign out
+            {uiCopy.profile.signOut}
           </button>
         </div>
         {status ? <p className="status-text">{status}</p> : null}

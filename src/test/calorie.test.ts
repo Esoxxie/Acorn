@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { calculateBmr, calculateTdee, computeDailyCoverage, scaleEstimate } from "../../shared/calorie";
+import {
+  calculateBmr,
+  calculateTdee,
+  computeDailyCoverage,
+  createMealSnapshot,
+  scaleEstimate,
+  scaleMealSnapshot,
+} from "../../shared/calorie";
 
 describe("calorie helpers", () => {
   it("calculates BMR and TDEE for a metric profile", () => {
@@ -46,5 +53,29 @@ describe("calorie helpers", () => {
     const scaled = scaleEstimate(estimate, 1.5);
     expect(scaled.calories).toBe(480);
     expect(scaled.macros.protein).toBe(33);
+  });
+
+  it("creates and scales meal snapshots for servings changes", () => {
+    const snapshot = createMealSnapshot({
+      calories: 250,
+      macros: { protein: 12.2, carbs: 20.7, fat: 8.4, fiber: 3.5 },
+      items: [
+        {
+          id: "base",
+          name: "Test item",
+          portion: "1 bowl",
+          calories: 250,
+          confidence: 91,
+          notes: null,
+          macros: { protein: 12.2, carbs: 20.7, fat: 8.4, fiber: 3.5 },
+        },
+      ],
+    });
+
+    const scaled = scaleMealSnapshot(snapshot, 3);
+
+    expect(scaled.calories).toBe(750);
+    expect(scaled.macros.protein).toBe(36.6);
+    expect(scaled.items[0].portion).toBe("1 bowl x3");
   });
 });

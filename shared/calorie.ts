@@ -1,4 +1,10 @@
-import type { ActivityLevel, MealEstimate, SavedFood, UserProfile } from "./models";
+import type { ActivityLevel, EstimateItem, MealEstimate, MacroSnapshot, SavedFood, UserProfile } from "./models";
+
+export type MealSnapshot = {
+  calories: number;
+  macros: MacroSnapshot;
+  items: EstimateItem[];
+};
 
 const activityMultipliers: Record<ActivityLevel, number> = {
   sedentary: 1.2,
@@ -14,6 +20,56 @@ export function roundKcal(value: number): number {
 
 export function roundMacro(value: number): number {
   return Math.max(0, Math.round(value * 10) / 10);
+}
+
+function cloneMealItems(items: MealSnapshot["items"]): MealSnapshot["items"] {
+  return items.map((item) => ({
+    ...item,
+    macros: {
+      protein: item.macros.protein,
+      carbs: item.macros.carbs,
+      fat: item.macros.fat,
+      fiber: item.macros.fiber ?? null,
+    },
+  }));
+}
+
+export function createMealSnapshot(source: Pick<MealEstimate, "calories" | "macros" | "items">): MealSnapshot {
+  return {
+    calories: roundKcal(source.calories),
+    macros: {
+      protein: roundMacro(source.macros.protein),
+      carbs: roundMacro(source.macros.carbs),
+      fat: roundMacro(source.macros.fat),
+      fiber: source.macros.fiber == null ? null : roundMacro(source.macros.fiber),
+    },
+    items: cloneMealItems(source.items),
+  };
+}
+
+export function scaleMealSnapshot(snapshot: MealSnapshot, servings: number): MealSnapshot {
+  const safeServings = Math.max(1, servings);
+
+  return {
+    calories: roundKcal(snapshot.calories * safeServings),
+    macros: {
+      protein: roundMacro(snapshot.macros.protein * safeServings),
+      carbs: roundMacro(snapshot.macros.carbs * safeServings),
+      fat: roundMacro(snapshot.macros.fat * safeServings),
+      fiber: snapshot.macros.fiber == null ? null : roundMacro(snapshot.macros.fiber * safeServings),
+    },
+    items: snapshot.items.map((item) => ({
+      ...item,
+      calories: roundKcal(item.calories * safeServings),
+      macros: {
+        protein: roundMacro(item.macros.protein * safeServings),
+        carbs: roundMacro(item.macros.carbs * safeServings),
+        fat: roundMacro(item.macros.fat * safeServings),
+        fiber: item.macros.fiber == null ? null : roundMacro(item.macros.fiber * safeServings),
+      },
+      portion: safeServings === 1 ? item.portion : `${item.portion} x${safeServings}`,
+    })),
+  };
 }
 
 export function calculateBmr(profile: UserProfile): number | null {
@@ -76,7 +132,7 @@ export function savedFoodToEstimate(savedFood: SavedFood): MealEstimate {
     calories: savedFood.calories,
     macros: savedFood.macros,
     confidence: 94,
-    assumptions: ["Logged from a saved food preset."],
+    assumptions: ["Aus einem Favoriten-Preset uebernommen."],
     refinementQuestions: [],
   };
 }
