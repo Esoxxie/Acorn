@@ -7,7 +7,7 @@ const nullableOptionalLimitedString = (maxLength: number) => z.string().max(maxL
 export const analyzeEntryInputSchema = z
   .object({
     mode: z.enum(["photo", "manual_ai"]),
-    imageBase64: nullableOptionalString,
+    imageBase64: z.string().max(5_242_880).optional().nullable(),
     mimeType: nullableOptionalString,
     manualText: nullableOptionalLimitedString(500),
     userContext: nullableOptionalLimitedString(500),

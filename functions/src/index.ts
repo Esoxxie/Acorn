@@ -81,7 +81,7 @@ export const analyzeEntry = onCall(
     region: "europe-west3",
     timeoutSeconds: 60,
     memory: "512MiB",
-    cors: true,
+    cors: ["https://acorn-99388.web.app", "https://acorn-99388.firebaseapp.com"],
     invoker: "public",
     secrets: [GEMINI_API_KEY],
   },
