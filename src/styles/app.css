@@ -119,6 +119,10 @@ body {
     position: absolute;
   }
 
+  .nav-add-button {
+    position: absolute;
+  }
+
   .sheet-backdrop {
     position: absolute;
   }
@@ -964,9 +968,8 @@ a {
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
   display: grid;
-  grid-template-columns: 1fr auto 1fr 1fr;
-  align-items: center;
-  gap: 0;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   will-change: transform;
@@ -993,10 +996,13 @@ a {
   background: color-mix(in srgb, var(--brand) 16%, transparent);
 }
 
-.bottom-nav__add-button {
-  width: 48px;
-  height: 48px;
-  margin: -20px 4px 0;
+.nav-add-button {
+  position: fixed;
+  right: 24px;
+  bottom: calc(82px + env(safe-area-inset-bottom));
+  z-index: 31;
+  width: 52px;
+  height: 52px;
   padding: 0;
   border-radius: 999px;
   border: 0;
@@ -1006,25 +1012,25 @@ a {
   color: #fff8f0;
   background: linear-gradient(135deg, var(--brand), var(--brand-strong));
   box-shadow:
-    0 6px 20px rgba(111, 67, 37, 0.35),
+    0 8px 24px rgba(111, 67, 37, 0.35),
     0 0 0 3px var(--bg-elevated);
   cursor: pointer;
   transition: transform 180ms ease, box-shadow 180ms ease;
-  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.bottom-nav__add-button:hover {
+.nav-add-button:hover {
   transform: translateY(-2px) scale(1.06);
   box-shadow:
-    0 10px 28px rgba(111, 67, 37, 0.4),
+    0 12px 30px rgba(111, 67, 37, 0.4),
     0 0 0 3px var(--bg-elevated);
 }
 
-.bottom-nav__add-button:active {
+.nav-add-button:active {
   transform: translateY(0) scale(0.96);
 }
 
-.bottom-nav__add-button svg {
+.nav-add-button svg {
   width: 20px;
   height: 20px;
 }

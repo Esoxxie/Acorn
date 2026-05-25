@@ -42,16 +42,15 @@ function AppShell() {
         </Routes>
       </main>
 
+      <button className="nav-add-button" onClick={openLogFlow} type="button" aria-label={uiCopy.nav.add}>
+        <Plus size={20} strokeWidth={2.5} />
+      </button>
+
       <nav className="bottom-nav">
         <NavLink className={({ isActive }) => `bottom-nav__item ${isActive ? "is-active" : ""}`} end to="/">
           <Home size={18} />
           <span>{uiCopy.nav.today}</span>
         </NavLink>
-
-        <button className="bottom-nav__add-button" onClick={openLogFlow} type="button" aria-label={uiCopy.nav.add}>
-          <Plus size={20} strokeWidth={2.5} />
-        </button>
-
         <NavLink className={({ isActive }) => `bottom-nav__item ${isActive ? "is-active" : ""}`} to="/library">
           <Library size={18} />
           <span>{uiCopy.nav.library}</span>
