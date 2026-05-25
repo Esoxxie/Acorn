@@ -65,8 +65,8 @@ test("zeigt Tagesuebersicht und erweiterbare Meal-Details fuer Demo-Nutzer", asy
   await page.addInitScript(seedDemoSession);
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Heute" }).first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Ø" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bilanz" }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Durchschnitt" })).toBeVisible();
   await expect(page.getByText(/Tagesziel:/i)).toBeVisible();
 
   await page.locator(".meal-card__summary").first().click();
@@ -82,8 +82,8 @@ test("laesst Acorns vom Squirrel regnen", async ({ page }) => {
 
   await page.getByRole("button", { name: /acorns regnen lassen/i }).click();
 
-  await expect(page.locator(".acorn-rain__drop")).toHaveCount(44);
-  await expect(page.locator(".acorn-rain")).toHaveCSS("position", "fixed");
+  await expect(page.locator(".animate-acorn").first()).toBeVisible();
+  await expect(page.locator(".animate-acorn").first()).toHaveCSS("position", "absolute");
 });
 
 test("zeigt vergangene Tage in der Heute-Ansicht", async ({ page }) => {

@@ -1,6 +1,5 @@
-import { useEffect, useId, useState, type CSSProperties } from "react";
-import { createPortal } from "react-dom";
-import { CalendarDays, Target, Leaf, Droplet, Wheat } from "lucide-react";
+import { useEffect, useId, useState, useRef } from "react";
+import { Target, Leaf, Droplet, Wheat } from "lucide-react";
 import type { MacroSnapshot } from "../../shared/models";
 import { uiCopy } from "../lib/copy";
 import { formatCalories } from "../lib/format";
@@ -12,6 +11,7 @@ import {
   type MacroGoalSnapshot,
   type MacroProgressRow,
 } from "../lib/nutrition-visuals";
+import { getMascotMessage } from "../lib/mascot-messages";
 import "../styles/nutrition-visuals.css";
 
 type RadialGoalRingProps = {
@@ -32,77 +32,14 @@ type ConfidencePillProps = {
 type DailySummaryCardProps = {
   currentCalories: number;
   goalCalories: number | null;
-  mealCount: number;
-  macroTotals: MacroSnapshot;
   missingProfileFields: string[];
   title?: string;
 };
-
-function ringMetrics(percentage: number) {
-  const size = 220;
-  const radius = 88;
-  const strokeWidth = 16;
-  const circumference = 2 * Math.PI * radius;
-  const progress = (circumference * percentage) / 100;
-
-  return {
-    size,
-    radius,
-    strokeWidth,
-    circumference,
-    progress,
-  };
-}
 
 function clampToCanvas(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
-const acornRainDrops = Array.from({ length: 60 }, (_, index) => {
-  const layer = index % 3; // 0: background, 1: midground, 2: foreground
-  let size = 24;
-  let duration = "2.5s";
-  let opacity = 1.0;
-  let blur = "0px";
-  let zIndex = 70;
-
-  if (layer === 0) {
-    size = 12 + (index % 8); // 12px to 19px
-    duration = `${2.8 + (index % 5) * 0.3}s`; // 2.8s to 4.0s
-    opacity = 0.55;
-    zIndex = 65;
-  } else if (layer === 1) {
-    size = 22 + (index % 8); // 22px to 29px
-    duration = `${2.0 + (index % 5) * 0.2}s`; // 2.0s to 2.8s
-    opacity = 0.95;
-    zIndex = 70;
-  } else {
-    size = 34 + (index % 10); // 34px to 43px
-    duration = `${1.2 + (index % 4) * 0.15}s`; // 1.2s to 1.65s
-    opacity = 0.9;
-    blur = "2px";
-    zIndex = 80;
-  }
-
-  const delay = `${(index * 35) % 1500}ms`;
-  const left = `${1 + (index * 17) % 98}%`;
-  const rotateStart = `${(index * 47) % 360}deg`;
-  const rotateSpeed = `${180 + (index % 3) * 90}deg`;
-  const drift = `${(index % 2 === 0 ? 1 : -1) * (15 + (index * 13) % 45)}px`;
-
-  return {
-    delay,
-    duration,
-    left,
-    size: `${size}px`,
-    opacity,
-    blur,
-    zIndex,
-    rotateStart,
-    rotateSpeed,
-    drift,
-  };
-});
 
 function SquirrelAcornStatus({
   currentCalories,
@@ -112,8 +49,16 @@ function SquirrelAcornStatus({
   goalCalories: number | null;
 }) {
   const [rainRun, setRainRun] = useState(0);
+  const [messageSeed, setMessageSeed] = useState(() => Math.floor(Math.random() * 100));
+  const [acorns, setAcorns] = useState<Array<{ id: number; left: number; size: number }>>([]);
+
+  const intervalRef = useRef<number | null>(null);
+  const stopTimeoutRef = useRef<number | null>(null);
+  const nextIdRef = useRef(0);
+
   const progress = getCalorieProgress(currentCalories, goalCalories);
   const overGoal = Boolean(progress.overflowCalories && progress.overflowCalories > 0);
+  const message = getMascotMessage(currentCalories, goalCalories, messageSeed);
   const squirrelSrc = overGoal ? "/mascots/squirrel-chubby.webp" : "/mascots/squirrel-thin.webp";
 
   useEffect(() => {
@@ -121,74 +66,119 @@ function SquirrelAcornStatus({
       return;
     }
 
-    const timeout = window.setTimeout(() => setRainRun(0), 4500);
-    return () => window.clearTimeout(timeout);
+    if (intervalRef.current) window.clearInterval(intervalRef.current);
+    if (stopTimeoutRef.current) window.clearTimeout(stopTimeoutRef.current);
+
+    const spawnAcorn = () => {
+      const id = nextIdRef.current++;
+      const left = 20 + Math.random() * 60; // 20% to 80%
+      const size = 1 + Math.random() * 1; // 1rem to 2rem
+      setAcorns((prev) => [...prev, { id, left, size }]);
+
+      window.setTimeout(() => {
+        setAcorns((prev) => prev.filter((a) => a.id !== id));
+      }, 800);
+    };
+
+    spawnAcorn();
+    intervalRef.current = window.setInterval(spawnAcorn, 80);
+
+    stopTimeoutRef.current = window.setTimeout(() => {
+      if (intervalRef.current) {
+        window.clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }, 3200);
+
+    const mainTimeout = window.setTimeout(() => setRainRun(0), 3900);
+
+    return () => {
+      if (intervalRef.current) window.clearInterval(intervalRef.current);
+      if (stopTimeoutRef.current) window.clearTimeout(stopTimeoutRef.current);
+      window.clearTimeout(mainTimeout);
+    };
   }, [rainRun]);
 
+  const percent = progress.hasGoal && goalCalories ? (currentCalories / goalCalories) * 100 : 0;
+  let headerClass = "mascot-message__header";
+  if (percent > 115) {
+    headerClass += " mascot-message__header--danger";
+  } else if (percent > 102) {
+    headerClass += " mascot-message__header--warning";
+  }
+
   return (
-    <div className="squirrel-container">
-      <div className="squirrel-bubble">
-        <div className="squirrel-bubble__header">
-          <Leaf className="squirrel-bubble__icon" size={14} aria-hidden="true" />
-          <span>{overGoal ? "Ziel erreicht!" : "Du machst das super!"}</span>
-        </div>
-        <p className="squirrel-bubble__text">
-          {progress.hasGoal ? (
-            overGoal ? (
-              <>
-                <strong>{formatCalories(progress.overflowCalories ?? 0)}</strong> über deinem Ziel.
-              </>
+    <div className="mascot-layout">
+      {/* 1. Speech bubble at the top (full-width) */}
+      <div className="mascot-bubble">
+        <div className="mascot-message">
+          <div className={headerClass}>
+            <Leaf className="mascot-message__icon" size={13} aria-hidden="true" />
+            <span>{message.header}</span>
+          </div>
+          <p className="mascot-message__text">
+            {message.fullText ? (
+              message.fullText
             ) : (
               <>
-                Noch <strong>{formatCalories(progress.remainingCalories ?? 0)}</strong> bis zu deinem Ziel.
+                {message.prefix}
+                <strong>{message.boldText}</strong>
+                {message.suffix}
               </>
-            )
-          ) : (
-            "Trage dein Tagesziel ein, um zu starten."
-          )}
-        </p>
-        <div className="squirrel-bubble__arrow" />
+            )}
+          </p>
+        </div>
+        <div className="mascot-bubble__arrow" />
       </div>
 
-      <button
-        aria-label={uiCopy.summary.rainAcorns}
-        className={["squirrel-status", overGoal ? "squirrel-status--over" : "squirrel-status--under"].join(" ")}
-        onClick={() => setRainRun((current) => current + 1)}
-        type="button"
-      >
-        <img
-          alt={overGoal ? uiCopy.summary.chubbySquirrel : uiCopy.summary.thinSquirrel}
-          className="squirrel-status__image"
-          src={squirrelSrc}
-        />
-      </button>
-      {rainRun ? createPortal(
-        <span aria-hidden="true" className="acorn-rain" key={rainRun}>
-          {acornRainDrops.map((drop, index) => (
+      {/* 2. Bottom row: ring on the left, squirrel on the right */}
+      <div className="mascot-bottom-row">
+        <div className="mascot-ring-wrapper">
+          <RadialGoalRing
+            className="daily-summary-card__ring"
+            currentCalories={currentCalories}
+            goalCalories={goalCalories}
+          />
+        </div>
+
+        <div className="mascot-character-wrapper">
+          <button
+            aria-label={uiCopy.summary.rainAcorns}
+            className={[
+              "squirrel-status",
+              overGoal ? "squirrel-status--over" : "squirrel-status--under",
+              rainRun ? "squirrel-status--celebrating" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            onClick={() => {
+              setRainRun((current) => current + 1);
+              setMessageSeed((current) => current + 1);
+            }}
+            type="button"
+          >
             <img
-              alt=""
-              className="acorn-rain__drop"
-              key={`${rainRun}-${index}`}
+              alt={overGoal ? uiCopy.summary.chubbySquirrel : uiCopy.summary.thinSquirrel}
+              className="squirrel-status__image"
+              src={squirrelSrc}
+            />
+          </button>
+
+          {acorns.map((a) => (
+            <img
+              key={a.id}
               src="/mascots/acorn.webp"
-              style={
-                {
-                  "--drop-delay": drop.delay,
-                  "--drop-duration": drop.duration,
-                  "--drop-left": drop.left,
-                  "--drop-size": drop.size,
-                  "--drop-opacity": drop.opacity,
-                  "--drop-blur": drop.blur,
-                  "--drop-zindex": drop.zIndex,
-                  "--drop-rotate-start": drop.rotateStart,
-                  "--drop-rotate-speed": drop.rotateSpeed,
-                  "--drop-drift": drop.drift,
-                } as CSSProperties
-              }
+              alt=""
+              className="animate-acorn"
+              style={{
+                left: `${a.left}%`,
+                width: `${a.size}rem`,
+                height: "auto",
+              }}
             />
           ))}
-        </span>,
-        document.body
-      ) : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -196,7 +186,11 @@ function SquirrelAcornStatus({
 export function RadialGoalRing({ currentCalories, goalCalories, className }: RadialGoalRingProps) {
   const ringId = useId();
   const progress = getCalorieProgress(currentCalories, goalCalories);
-  const metrics = ringMetrics(clampToCanvas(progress.percent));
+  const size = 220;
+  const strokeWidth = 14;
+  const squirclePerimeter = 659.292;
+  const progressPercent = clampToCanvas(progress.percent);
+  const progressOffset = squirclePerimeter - (squirclePerimeter * progressPercent) / 100;
   const overGoal = Boolean(progress.overflowCalories && progress.overflowCalories > 0);
 
   return (
@@ -204,7 +198,7 @@ export function RadialGoalRing({ currentCalories, goalCalories, className }: Rad
       <svg
         aria-hidden="true"
         className="nutrition-ring__svg"
-        viewBox={`0 0 ${metrics.size} ${metrics.size}`}
+        viewBox={`0 0 ${size} ${size}`}
       >
         <defs>
           <linearGradient id={`${ringId}-progress`} x1="0%" x2="100%" y1="0%" y2="100%">
@@ -216,22 +210,18 @@ export function RadialGoalRing({ currentCalories, goalCalories, className }: Rad
             <stop offset="100%" stopColor="var(--nutrition-carbs)" />
           </linearGradient>
         </defs>
-        <circle
+        <path
           className="nutrition-ring__track"
-          cx={metrics.size / 2}
-          cy={metrics.size / 2}
-          r={metrics.radius}
-          strokeWidth={metrics.strokeWidth}
+          d="M 110 16 L 150 16 A 54 54 0 0 1 204 70 L 204 150 A 54 54 0 0 1 150 204 L 70 204 A 54 54 0 0 1 16 150 L 16 70 A 54 54 0 0 1 70 16 Z"
+          strokeWidth={strokeWidth}
         />
-        <circle
+        <path
           className="nutrition-ring__progress"
-          cx={metrics.size / 2}
-          cy={metrics.size / 2}
-          r={metrics.radius}
+          d="M 110 16 L 150 16 A 54 54 0 0 1 204 70 L 204 150 A 54 54 0 0 1 150 204 L 70 204 A 54 54 0 0 1 16 150 L 16 70 A 54 54 0 0 1 70 16 Z"
           stroke={overGoal ? `url(#${ringId}-overflow)` : `url(#${ringId}-progress)`}
-          strokeDasharray={`${metrics.circumference} ${metrics.circumference}`}
-          strokeDashoffset={metrics.circumference - metrics.progress}
-          strokeWidth={metrics.strokeWidth}
+          strokeDasharray={`${squirclePerimeter} ${squirclePerimeter}`}
+          strokeDashoffset={progressOffset}
+          strokeWidth={strokeWidth}
         />
       </svg>
       <div className="nutrition-ring__center">
@@ -241,13 +231,13 @@ export function RadialGoalRing({ currentCalories, goalCalories, className }: Rad
         {goalCalories ? (
           <>
             <hr className="nutrition-ring__divider" aria-hidden="true" />
-            <span className="nutrition-ring__remaining-value">
+            <span className={`nutrition-ring__remaining-value ${overGoal ? "is-over" : ""}`}>
               {overGoal
-                ? `+${Math.round(progress.overflowCalories ?? 0)} kcal`
-                : `${Math.round(progress.remainingCalories ?? 0)} kcal`}
+                ? `+${Math.round(progress.overflowCalories ?? 0)}`
+                : `${Math.round(progress.remainingCalories ?? 0)}`}
             </span>
             <span className="nutrition-ring__remaining-label">
-              {overGoal ? "über Ziel" : "übrig"}
+              {overGoal ? "kcal drüber" : "kcal übrig"}
             </span>
           </>
         ) : (
@@ -277,13 +267,10 @@ function MacroProgressRow({ row }: { row: MacroProgressRow }) {
   const fillWidth = clampToCanvas(row.percent ?? 0);
 
   let Icon = Leaf;
-  let iconClass = "macro-progress-row__icon-container--protein";
   if (row.key === "fat") {
     Icon = Droplet;
-    iconClass = "macro-progress-row__icon-container--fat";
   } else if (row.key === "carbs") {
     Icon = Wheat;
-    iconClass = "macro-progress-row__icon-container--carbs";
   }
 
   const currentVal = Math.round(row.current * 10) / 10;
@@ -293,12 +280,10 @@ function MacroProgressRow({ row }: { row: MacroProgressRow }) {
   return (
     <article className="macro-progress-row">
       <div className="macro-progress-row__top-card">
+        <Icon size={13} style={{ color: row.color }} aria-hidden="true" />
         <span className="macro-progress-row__label" style={{ color: row.color }}>
           {row.label}
         </span>
-        <div className={["macro-progress-row__icon-container", iconClass].join(" ")}>
-          <Icon size={14} aria-hidden="true" />
-        </div>
       </div>
 
       <div className="macro-progress-row__value-section">
@@ -314,7 +299,7 @@ function MacroProgressRow({ row }: { row: MacroProgressRow }) {
 
       <div className="macro-progress-row__progress-section">
         <div className="macro-progress-row__track" aria-hidden="true">
-          <span className="macro-progress-row__fill" style={{ background: row.color, width: `${fillWidth}%` }} />
+          <span className={`macro-progress-row__fill macro-progress-row__fill--${row.key}`} style={{ width: `${fillWidth}%` }} />
         </div>
         {percentage !== null ? (
           <span className="macro-progress-row__percent" style={{ color: row.color }}>
@@ -339,14 +324,11 @@ export function ConfidencePill({ confidence }: ConfidencePillProps) {
 export function DailySummaryCard({
   currentCalories,
   goalCalories,
-  mealCount,
-  macroTotals,
   missingProfileFields,
   title = uiCopy.summary.title,
-}: DailySummaryCardProps) {
-  const macroTargets = deriveMacroTargets(goalCalories);
+}: Omit<DailySummaryCardProps, "macroTotals">) {
   const subtitle = goalCalories
-    ? `${mealCount} ${mealCount === 1 ? "Eintrag" : "Einträge"}`
+    ? null
     : missingProfileFields.length
       ? `Ergänze ${missingProfileFields.join(", ")} im Profil.`
       : "Vervollständige dein Profil.";
@@ -357,9 +339,8 @@ export function DailySummaryCard({
         <div className="daily-summary-card__titles">
           <div className="daily-summary-card__title-row">
             <h1>{title}</h1>
-            <CalendarDays className="daily-summary-card__calendar-icon" size={18} aria-hidden="true" />
           </div>
-          <p>{subtitle}</p>
+          {subtitle && <p>{subtitle}</p>}
         </div>
         {goalCalories ? (
           <div className="daily-summary-card__badge">
@@ -370,14 +351,22 @@ export function DailySummaryCard({
       </div>
 
       <div className="daily-summary-card__hero">
-        <RadialGoalRing
-          className="daily-summary-card__ring"
-          currentCalories={currentCalories}
-          goalCalories={goalCalories}
-        />
         <SquirrelAcornStatus currentCalories={currentCalories} goalCalories={goalCalories} />
       </div>
+    </section>
+  );
+}
 
+export function MacroSummaryCard({
+  macroTotals,
+  goalCalories,
+}: {
+  macroTotals: MacroSnapshot;
+  goalCalories: number | null;
+}) {
+  const macroTargets = deriveMacroTargets(goalCalories);
+  return (
+    <section className="section-card macro-summary-card">
       <MacroProgressList macroTargets={macroTargets} macroTotals={macroTotals} />
     </section>
   );

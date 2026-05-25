@@ -40,7 +40,7 @@ export function BottomSheet({ children, open, onClose, subtitle, title }: Bottom
             <h2>{title}</h2>
             {subtitle ? <p className="sheet__subtitle">{subtitle}</p> : null}
           </div>
-          <button aria-label="Close" className="icon-button" onClick={onClose} type="button">
+          <button aria-label="Schließen" className="icon-button" onClick={onClose} type="button">
             <X size={18} />
           </button>
         </div>

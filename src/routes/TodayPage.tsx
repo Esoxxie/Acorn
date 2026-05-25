@@ -3,7 +3,7 @@ import { useMemo, useState, type CSSProperties } from "react";
 import { useAppData } from "../app/contexts";
 import { BottomSheet } from "../components/BottomSheet";
 import { MealCard } from "../components/MealCard";
-import { DailySummaryCard } from "../components/NutritionVisuals";
+import { DailySummaryCard, MacroSummaryCard } from "../components/NutritionVisuals";
 import type { MacroSnapshot, MealRecord } from "../../shared/models";
 import { useLogFlow } from "../features/log/LogFlow";
 import { uiCopy } from "../lib/copy";
@@ -149,51 +149,36 @@ export function TodayPage() {
         </button>
       </section>
 
-      <DailySummaryCard
-        currentCalories={selectedCalories}
-        goalCalories={dailySpend}
-        macroTotals={selectedMacros}
-        mealCount={selectedMeals.length}
-        missingProfileFields={missingProfileFields}
-        title={selectedDateLabel}
-      />
+      <div key={selectedDayKey} className="stack day-content-fade">
+        <DailySummaryCard
+          currentCalories={selectedCalories}
+          goalCalories={dailySpend}
+          missingProfileFields={missingProfileFields}
+          title="Bilanz"
+        />
 
-      <section
-        aria-label={uiCopy.today.openStats}
-        className="section-card stats-section-card"
-        onClick={() => setStatsOpen(true)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            setStatsOpen(true);
-          }
-        }}
-        role="button"
-        tabIndex={0}
-      >
-        <div className="section-card__header">
-          <h2>{uiCopy.today.averages}</h2>
-          <BarChart3 aria-hidden="true" size={18} />
-        </div>
-        <div className="stats-grid stats-grid--compact">
-          <article className="stat-card">
-            <span>{uiCopy.today.weeklyAverage}</span>
-            <strong>{formatCalories(weeklyAverage.calories)}</strong>
-          </article>
-          <article className="stat-card">
-            <span>{uiCopy.today.monthlyAverage}</span>
-            <strong>{formatCalories(monthlyAverage.calories)}</strong>
-          </article>
-        </div>
-      </section>
+        <MacroSummaryCard
+          macroTotals={selectedMacros}
+          goalCalories={dailySpend}
+        />
 
-      <BottomSheet
-        onClose={() => setStatsOpen(false)}
-        open={statsOpen}
-        subtitle={selectedDateLabel}
-        title={uiCopy.today.statsTitle}
-      >
-        <div className="stats-sheet">
+        <section
+          aria-label={uiCopy.today.openStats}
+          className="section-card stats-section-card"
+          onClick={() => setStatsOpen(true)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              setStatsOpen(true);
+            }
+          }}
+          role="button"
+          tabIndex={0}
+        >
+          <div className="section-card__header">
+            <h2>{uiCopy.today.averages}</h2>
+            <BarChart3 aria-hidden="true" size={18} />
+          </div>
           <div className="stats-grid stats-grid--compact">
             <article className="stat-card">
               <span>{uiCopy.today.weeklyAverage}</span>
@@ -204,92 +189,112 @@ export function TodayPage() {
               <strong>{formatCalories(monthlyAverage.calories)}</strong>
             </article>
           </div>
+        </section>
 
-          <section className="calorie-chart" aria-label={uiCopy.today.chartLabel}>
-            <div className="calorie-chart__plot">
-              {chartSeries.map((day) => {
-                const height = Math.max(4, Math.round((day.calories / chartMaxCalories) * 100));
+        <BottomSheet
+          onClose={() => setStatsOpen(false)}
+          open={statsOpen}
+          subtitle={selectedDateLabel}
+          title={uiCopy.today.statsTitle}
+        >
+          <div className="stats-sheet">
+            <div className="stats-grid stats-grid--compact">
+              <article className="stat-card">
+                <span>{uiCopy.today.weeklyAverage}</span>
+                <strong>{formatCalories(weeklyAverage.calories)}</strong>
+              </article>
+              <article className="stat-card">
+                <span>{uiCopy.today.monthlyAverage}</span>
+                <strong>{formatCalories(monthlyAverage.calories)}</strong>
+              </article>
+            </div>
+
+            <section className="calorie-chart" aria-label={uiCopy.today.chartLabel}>
+              <div className="calorie-chart__plot">
+                {chartSeries.map((day) => {
+                  const height = Math.max(4, Math.round((day.calories / chartMaxCalories) * 100));
+
+                  return (
+                    <div className="calorie-chart__bar-wrap" key={day.dayKey}>
+                      <span
+                        aria-label={`${formatChartDayLabel(day.dayKey)} ${formatCalories(day.calories)}`}
+                        className={`calorie-chart__bar ${day.calories ? "" : "calorie-chart__bar--empty"}`}
+                        style={{ "--bar-height": `${height}%` } as CSSProperties}
+                        title={`${formatChartDayLabel(day.dayKey)} ${formatCalories(day.calories)}`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="calorie-chart__axis">
+                <span>{formatChartDayLabel(chartSeries[0]?.dayKey ?? selectedDayKey)}</span>
+                <span>{uiCopy.today.todayMarker}</span>
+              </div>
+            </section>
+          </div>
+        </BottomSheet>
+
+        {savedFoods.length ? (
+          <section className="section-card">
+            <div className="section-card__header">
+              <h2>{uiCopy.today.addFromLibrary}</h2>
+            </div>
+            <div className="saved-food-rail">
+              {savedFoods.map((savedFood) => {
+                const Icon = getFoodIcon([
+                  savedFood.title,
+                  savedFood.summary,
+                  savedFood.items.map((item) => item.name).join(" "),
+                ]);
 
                 return (
-                  <div className="calorie-chart__bar-wrap" key={day.dayKey}>
-                    <span
-                      aria-label={`${formatChartDayLabel(day.dayKey)} ${formatCalories(day.calories)}`}
-                      className={`calorie-chart__bar ${day.calories ? "" : "calorie-chart__bar--empty"}`}
-                      style={{ "--bar-height": `${height}%` } as CSSProperties}
-                      title={`${formatChartDayLabel(day.dayKey)} ${formatCalories(day.calories)}`}
-                    />
-                  </div>
+                  <button
+                    className="saved-food-chip"
+                    key={savedFood.id}
+                    onClick={() => void addSavedFoodToSelectedDay(savedFood.id)}
+                    type="button"
+                  >
+                    <span className="favorite-card__icon">
+                      <Icon aria-hidden="true" size={18} />
+                    </span>
+                    <span>
+                      <strong>{savedFood.title}</strong>
+                      <small>{formatCalories(savedFood.calories)}</small>
+                    </span>
+                    <Plus aria-hidden="true" size={16} />
+                  </button>
                 );
               })}
             </div>
-            <div className="calorie-chart__axis">
-              <span>{formatChartDayLabel(chartSeries[0]?.dayKey ?? selectedDayKey)}</span>
-              <span>{uiCopy.today.todayMarker}</span>
-            </div>
           </section>
-        </div>
-      </BottomSheet>
+        ) : null}
 
-      {savedFoods.length ? (
         <section className="section-card">
           <div className="section-card__header">
-            <h2>{uiCopy.today.addFromLibrary}</h2>
+            <h1>{uiCopy.today.entries}</h1>
           </div>
-          <div className="saved-food-rail">
-            {savedFoods.map((savedFood) => {
-              const Icon = getFoodIcon([
-                savedFood.title,
-                savedFood.summary,
-                savedFood.items.map((item) => item.name).join(" "),
-              ]);
-
-              return (
-                <button
-                  className="saved-food-chip"
-                  key={savedFood.id}
-                  onClick={() => void addSavedFoodToSelectedDay(savedFood.id)}
-                  type="button"
-                >
-                  <span className="favorite-card__icon">
-                    <Icon aria-hidden="true" size={18} />
-                  </span>
-                  <span>
-                    <strong>{savedFood.title}</strong>
-                    <small>{formatCalories(savedFood.calories)}</small>
-                  </span>
-                  <Plus aria-hidden="true" size={16} />
-                </button>
-              );
-            })}
-          </div>
+          {selectedMeals.length ? (
+            <div className="stack">
+              {selectedMeals.map((meal) => (
+                <MealCard
+                  expanded={expandedMealId === meal.id}
+                  key={meal.id}
+                  meal={meal}
+                  onDelete={deleteMeal}
+                  onEdit={openEditMeal}
+                  onFavorite={toggleMealFavorite}
+                  onToggleExpand={(currentMeal) =>
+                    setExpandedMealId((activeMealId) => (activeMealId === currentMeal.id ? null : currentMeal.id))
+                  }
+                  onUpdateServings={updateMealServings}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">{uiCopy.today.empty}</div>
+          )}
         </section>
-      ) : null}
-
-      <section className="section-card">
-        <div className="section-card__header">
-          <h1>{uiCopy.today.entries}</h1>
-        </div>
-        {selectedMeals.length ? (
-          <div className="stack">
-            {selectedMeals.map((meal) => (
-              <MealCard
-                expanded={expandedMealId === meal.id}
-                key={meal.id}
-                meal={meal}
-                onDelete={deleteMeal}
-                onEdit={openEditMeal}
-                onFavorite={toggleMealFavorite}
-                onToggleExpand={(currentMeal) =>
-                  setExpandedMealId((activeMealId) => (activeMealId === currentMeal.id ? null : currentMeal.id))
-                }
-                onUpdateServings={updateMealServings}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">{uiCopy.today.empty}</div>
-        )}
-      </section>
+      </div>
     </div>
   );
 }

@@ -19,7 +19,7 @@ function svgMealThumb(background: string, foreground: string, label: string) {
       <rect width="320" height="320" rx="56" fill="url(#g)" />
       <circle cx="160" cy="170" r="90" fill="rgba(255,255,255,0.18)" />
       <circle cx="160" cy="170" r="68" fill="rgba(255,255,255,0.34)" />
-      <text x="160" y="180" text-anchor="middle" font-size="28" fill="#fffaf3" font-family="Manrope, Arial, sans-serif">${label}</text>
+      <text x="160" y="180" text-anchor="middle" font-size="28" fill="#fffaf3" font-family="Inter, Arial, sans-serif">${label}</text>
     </svg>
   `;
 
