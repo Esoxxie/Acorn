@@ -1,7 +1,9 @@
-import { useId } from "react";
+import { useEffect, useId, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
+import { CalendarDays, Target, Leaf, Droplet, Wheat } from "lucide-react";
 import type { MacroSnapshot } from "../../shared/models";
 import { uiCopy } from "../lib/copy";
-import { formatCalories, formatMacro } from "../lib/format";
+import { formatCalories } from "../lib/format";
 import {
   buildMacroProgressRows,
   deriveMacroTargets,
@@ -56,16 +58,146 @@ function clampToCanvas(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
+const acornRainDrops = Array.from({ length: 60 }, (_, index) => {
+  const layer = index % 3; // 0: background, 1: midground, 2: foreground
+  let size = 24;
+  let duration = "2.5s";
+  let opacity = 1.0;
+  let blur = "0px";
+  let zIndex = 70;
+
+  if (layer === 0) {
+    size = 12 + (index % 8); // 12px to 19px
+    duration = `${2.8 + (index % 5) * 0.3}s`; // 2.8s to 4.0s
+    opacity = 0.55;
+    zIndex = 65;
+  } else if (layer === 1) {
+    size = 22 + (index % 8); // 22px to 29px
+    duration = `${2.0 + (index % 5) * 0.2}s`; // 2.0s to 2.8s
+    opacity = 0.95;
+    zIndex = 70;
+  } else {
+    size = 34 + (index % 10); // 34px to 43px
+    duration = `${1.2 + (index % 4) * 0.15}s`; // 1.2s to 1.65s
+    opacity = 0.9;
+    blur = "2px";
+    zIndex = 80;
+  }
+
+  const delay = `${(index * 35) % 1500}ms`;
+  const left = `${1 + (index * 17) % 98}%`;
+  const rotateStart = `${(index * 47) % 360}deg`;
+  const rotateSpeed = `${180 + (index % 3) * 90}deg`;
+  const drift = `${(index % 2 === 0 ? 1 : -1) * (15 + (index * 13) % 45)}px`;
+
+  return {
+    delay,
+    duration,
+    left,
+    size: `${size}px`,
+    opacity,
+    blur,
+    zIndex,
+    rotateStart,
+    rotateSpeed,
+    drift,
+  };
+});
+
+function SquirrelAcornStatus({
+  currentCalories,
+  goalCalories,
+}: {
+  currentCalories: number;
+  goalCalories: number | null;
+}) {
+  const [rainRun, setRainRun] = useState(0);
+  const progress = getCalorieProgress(currentCalories, goalCalories);
+  const overGoal = Boolean(progress.overflowCalories && progress.overflowCalories > 0);
+  const squirrelSrc = overGoal ? "/mascots/squirrel-chubby.webp" : "/mascots/squirrel-thin.webp";
+
+  useEffect(() => {
+    if (!rainRun) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setRainRun(0), 4500);
+    return () => window.clearTimeout(timeout);
+  }, [rainRun]);
+
+  return (
+    <div className="squirrel-container">
+      <div className="squirrel-bubble">
+        <div className="squirrel-bubble__header">
+          <Leaf className="squirrel-bubble__icon" size={14} aria-hidden="true" />
+          <span>{overGoal ? "Ziel erreicht!" : "Du machst das super!"}</span>
+        </div>
+        <p className="squirrel-bubble__text">
+          {progress.hasGoal ? (
+            overGoal ? (
+              <>
+                <strong>{formatCalories(progress.overflowCalories ?? 0)}</strong> über deinem Ziel.
+              </>
+            ) : (
+              <>
+                Noch <strong>{formatCalories(progress.remainingCalories ?? 0)}</strong> bis zu deinem Ziel.
+              </>
+            )
+          ) : (
+            "Trage dein Tagesziel ein, um zu starten."
+          )}
+        </p>
+        <div className="squirrel-bubble__arrow" />
+      </div>
+
+      <button
+        aria-label={uiCopy.summary.rainAcorns}
+        className={["squirrel-status", overGoal ? "squirrel-status--over" : "squirrel-status--under"].join(" ")}
+        onClick={() => setRainRun((current) => current + 1)}
+        type="button"
+      >
+        <img
+          alt={overGoal ? uiCopy.summary.chubbySquirrel : uiCopy.summary.thinSquirrel}
+          className="squirrel-status__image"
+          src={squirrelSrc}
+        />
+      </button>
+      {rainRun ? createPortal(
+        <span aria-hidden="true" className="acorn-rain" key={rainRun}>
+          {acornRainDrops.map((drop, index) => (
+            <img
+              alt=""
+              className="acorn-rain__drop"
+              key={`${rainRun}-${index}`}
+              src="/mascots/acorn.webp"
+              style={
+                {
+                  "--drop-delay": drop.delay,
+                  "--drop-duration": drop.duration,
+                  "--drop-left": drop.left,
+                  "--drop-size": drop.size,
+                  "--drop-opacity": drop.opacity,
+                  "--drop-blur": drop.blur,
+                  "--drop-zindex": drop.zIndex,
+                  "--drop-rotate-start": drop.rotateStart,
+                  "--drop-rotate-speed": drop.rotateSpeed,
+                  "--drop-drift": drop.drift,
+                } as CSSProperties
+              }
+            />
+          ))}
+        </span>,
+        document.body
+      ) : null}
+    </div>
+  );
+}
+
 export function RadialGoalRing({ currentCalories, goalCalories, className }: RadialGoalRingProps) {
   const ringId = useId();
   const progress = getCalorieProgress(currentCalories, goalCalories);
   const metrics = ringMetrics(clampToCanvas(progress.percent));
   const overGoal = Boolean(progress.overflowCalories && progress.overflowCalories > 0);
-  const remaining = progress.hasGoal
-    ? overGoal
-      ? `+${formatCalories(progress.overflowCalories ?? 0)} über Ziel`
-      : `${formatCalories(progress.remainingCalories ?? 0)} übrig`
-    : null;
 
   return (
     <section className={["nutrition-ring", className].filter(Boolean).join(" ")}>
@@ -103,13 +235,27 @@ export function RadialGoalRing({ currentCalories, goalCalories, className }: Rad
         />
       </svg>
       <div className="nutrition-ring__center">
-        <strong>{formatCalories(currentCalories)}</strong>
+        <strong className="nutrition-ring__eaten-value">{Math.round(currentCalories)}</strong>
+        <span className="nutrition-ring__eaten-label">kcal gegessen</span>
+
         {goalCalories ? (
-          <span>von {formatCalories(goalCalories)}</span>
+          <>
+            <hr className="nutrition-ring__divider" aria-hidden="true" />
+            <span className="nutrition-ring__remaining-value">
+              {overGoal
+                ? `+${Math.round(progress.overflowCalories ?? 0)} kcal`
+                : `${Math.round(progress.remainingCalories ?? 0)} kcal`}
+            </span>
+            <span className="nutrition-ring__remaining-label">
+              {overGoal ? "über Ziel" : "übrig"}
+            </span>
+          </>
         ) : (
-          <span>{uiCopy.summary.missingGoal}</span>
+          <>
+            <hr className="nutrition-ring__divider" aria-hidden="true" />
+            <span className="nutrition-ring__remaining-label">{uiCopy.summary.missingGoal}</span>
+          </>
         )}
-        {remaining ? <p>{remaining}</p> : null}
       </div>
     </section>
   );
@@ -128,23 +274,53 @@ export function MacroProgressList({ macroTotals, macroTargets }: MacroProgressLi
 }
 
 function MacroProgressRow({ row }: { row: MacroProgressRow }) {
-  const targetLabel = row.target ? `${Math.round(row.target)}g` : uiCopy.summary.noTarget;
-  const currentLabel = formatMacro(row.current);
   const fillWidth = clampToCanvas(row.percent ?? 0);
+
+  let Icon = Leaf;
+  let iconClass = "macro-progress-row__icon-container--protein";
+  if (row.key === "fat") {
+    Icon = Droplet;
+    iconClass = "macro-progress-row__icon-container--fat";
+  } else if (row.key === "carbs") {
+    Icon = Wheat;
+    iconClass = "macro-progress-row__icon-container--carbs";
+  }
+
+  const currentVal = Math.round(row.current * 10) / 10;
+  const targetVal = row.target ? Math.round(row.target) : null;
+  const percentage = row.percent !== null ? Math.round(row.percent) : null;
 
   return (
     <article className="macro-progress-row">
-      <div className="macro-progress-row__top">
+      <div className="macro-progress-row__top-card">
         <span className="macro-progress-row__label" style={{ color: row.color }}>
           {row.label}
         </span>
-        <span className="macro-progress-row__values">
-          {currentLabel}
-          {row.target ? <span className="macro-progress-row__goal"> / {targetLabel}</span> : null}
-        </span>
+        <div className={["macro-progress-row__icon-container", iconClass].join(" ")}>
+          <Icon size={14} aria-hidden="true" />
+        </div>
       </div>
-      <div className="macro-progress-row__track" aria-hidden="true">
-        <span className="macro-progress-row__fill" style={{ background: row.color, width: `${fillWidth}%` }} />
+
+      <div className="macro-progress-row__value-section">
+        <strong className="macro-progress-row__current-value">
+          {currentVal} <span className="macro-progress-row__g-unit">g</span>
+        </strong>
+        {targetVal ? (
+          <div className="macro-progress-row__target-value">
+            / {targetVal} g Ziel
+          </div>
+        ) : null}
+      </div>
+
+      <div className="macro-progress-row__progress-section">
+        <div className="macro-progress-row__track" aria-hidden="true">
+          <span className="macro-progress-row__fill" style={{ background: row.color, width: `${fillWidth}%` }} />
+        </div>
+        {percentage !== null ? (
+          <span className="macro-progress-row__percent" style={{ color: row.color }}>
+            {percentage} %
+          </span>
+        ) : null}
       </div>
     </article>
   );
@@ -170,7 +346,7 @@ export function DailySummaryCard({
 }: DailySummaryCardProps) {
   const macroTargets = deriveMacroTargets(goalCalories);
   const subtitle = goalCalories
-    ? `${formatCalories(currentCalories)} in ${mealCount} ${mealCount === 1 ? "Eintrag" : "Einträgen"}`
+    ? `${mealCount} ${mealCount === 1 ? "Eintrag" : "Einträge"}`
     : missingProfileFields.length
       ? `Ergänze ${missingProfileFields.join(", ")} im Profil.`
       : "Vervollständige dein Profil.";
@@ -179,21 +355,28 @@ export function DailySummaryCard({
     <section className="section-card daily-summary-card">
       <div className="daily-summary-card__header">
         <div className="daily-summary-card__titles">
-          <h1>{title}</h1>
+          <div className="daily-summary-card__title-row">
+            <h1>{title}</h1>
+            <CalendarDays className="daily-summary-card__calendar-icon" size={18} aria-hidden="true" />
+          </div>
           <p>{subtitle}</p>
         </div>
         {goalCalories ? (
           <div className="daily-summary-card__badge">
-            {uiCopy.summary.targetPrefix} {formatCalories(goalCalories)}
+            <Target className="daily-summary-card__badge-icon" size={14} aria-hidden="true" />
+            <span>Tagesziel: {formatCalories(goalCalories)}</span>
           </div>
         ) : null}
       </div>
 
-      <RadialGoalRing
-        className="daily-summary-card__ring"
-        currentCalories={currentCalories}
-        goalCalories={goalCalories}
-      />
+      <div className="daily-summary-card__hero">
+        <RadialGoalRing
+          className="daily-summary-card__ring"
+          currentCalories={currentCalories}
+          goalCalories={goalCalories}
+        />
+        <SquirrelAcornStatus currentCalories={currentCalories} goalCalories={goalCalories} />
+      </div>
 
       <MacroProgressList macroTargets={macroTargets} macroTotals={macroTotals} />
     </section>

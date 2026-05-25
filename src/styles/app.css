@@ -66,6 +66,58 @@ body {
   position: relative;
 }
 
+@media (min-width: 480px) {
+  body {
+    background: #0f0d0c;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  #app {
+    width: 360px;
+    height: 780px;
+    border: 12px solid #28211c;
+    border-radius: 40px;
+    background: var(--bg);
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    position: relative;
+  }
+
+  #app::before {
+    border-radius: 28px;
+  }
+
+  .shell {
+    min-height: 100% !important;
+    height: 100%;
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+  }
+
+  .auth-page {
+    min-height: 100% !important;
+    height: 100%;
+  }
+
+  .bottom-nav {
+    position: absolute;
+  }
+
+  .floating-log-button {
+    position: absolute;
+    bottom: 96px;
+  }
+
+  .sheet-backdrop {
+    position: absolute;
+  }
+}
+
 #app::before {
   content: "";
   position: fixed;

@@ -32,7 +32,7 @@ const macroOrder: Array<{
 }> = [
   { key: "protein", label: "Protein", color: "var(--nutrition-protein)" },
   { key: "fat", label: "Fett", color: "var(--nutrition-fat)" },
-  { key: "carbs", label: "Kohlenh.", color: "var(--nutrition-carbs)" },
+  { key: "carbs", label: "Kohlenhydrate", color: "var(--nutrition-carbs)" },
 ];
 
 export function clampPercent(value: number) {

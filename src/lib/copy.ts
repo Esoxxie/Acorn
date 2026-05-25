@@ -55,6 +55,9 @@ export const uiCopy = {
     completeProfile: "Profil ergänzen",
     missingGoal: "Ziel fehlt",
     noTarget: "Kein Ziel",
+    rainAcorns: "Acorns regnen lassen",
+    chubbySquirrel: "Sattes Squirrel",
+    thinSquirrel: "Leichtes Squirrel",
   },
   profile: {
     heading: "Profil",

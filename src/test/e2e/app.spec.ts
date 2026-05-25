@@ -51,7 +51,7 @@ test("kann eine neue Schaetzung vor dem Speichern manuell bearbeiten", async ({ 
   await page.getByRole("button", { name: /^sch.tzen$/i }).click();
   await expect(page.locator(".estimate-card--review")).toBeVisible();
 
-  await page.locator(".sheet__actions").getByRole("button", { name: /^bearbeiten$/i }).click();
+  await page.locator(".sheet__actions").getByRole("button", { name: /^(bearbeiten|.ndern)$/i }).click();
   await expect(page.getByRole("heading", { name: "Gericht bearbeiten" })).toBeVisible();
   await page.getByLabel("Name").fill("Korrigierte Mahlzeit");
   await page.getByLabel("kcal").first().fill("610");
@@ -74,6 +74,16 @@ test("zeigt Tagesuebersicht und erweiterbare Meal-Details fuer Demo-Nutzer", asy
   await expect(page.getByText("Hohe Sicherheit")).toBeVisible();
   await expect(page.getByRole("button", { name: /bearbeiten/i }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: /favorisiert|favorit/i }).first()).toBeVisible();
+});
+
+test("laesst Acorns vom Squirrel regnen", async ({ page }) => {
+  await page.addInitScript(seedDemoSession);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: /acorns regnen lassen/i }).click();
+
+  await expect(page.locator(".acorn-rain__drop")).toHaveCount(44);
+  await expect(page.locator(".acorn-rain")).toHaveCSS("position", "fixed");
 });
 
 test("zeigt vergangene Tage in der Heute-Ansicht", async ({ page }) => {
