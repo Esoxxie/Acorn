@@ -31,11 +31,43 @@ function loadImage(blob: Blob): Promise<HTMLImageElement> {
   });
 }
 
-async function resizeImage(blob: Blob, maxEdge: number, quality: number): Promise<Blob> {
+async function decodeImage(blob: Blob): Promise<{
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+  close: () => void;
+}> {
+  if ("createImageBitmap" in window) {
+    try {
+      const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        close: () => bitmap.close(),
+      };
+    } catch {
+      // Fall back to HTMLImageElement decoding below for older or stricter browsers.
+    }
+  }
+
   const image = await loadImage(blob);
-  const ratio = Math.min(1, maxEdge / Math.max(image.width, image.height));
-  const width = Math.max(1, Math.round(image.width * ratio));
-  const height = Math.max(1, Math.round(image.height * ratio));
+  return {
+    source: image,
+    width: image.naturalWidth || image.width,
+    height: image.naturalHeight || image.height,
+    close: () => undefined,
+  };
+}
+
+function resizeDecodedImage(
+  decodedImage: { source: CanvasImageSource; width: number; height: number },
+  maxEdge: number,
+  quality: number,
+): Promise<Blob> {
+  const ratio = Math.min(1, maxEdge / Math.max(decodedImage.width, decodedImage.height));
+  const width = Math.max(1, Math.round(decodedImage.width * ratio));
+  const height = Math.max(1, Math.round(decodedImage.height * ratio));
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -45,7 +77,7 @@ async function resizeImage(blob: Blob, maxEdge: number, quality: number): Promis
     throw new Error("Canvas is not available in this browser.");
   }
 
-  context.drawImage(image, 0, 0, width, height);
+  context.drawImage(decodedImage.source, 0, 0, width, height);
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -63,20 +95,28 @@ async function resizeImage(blob: Blob, maxEdge: number, quality: number): Promis
 }
 
 export async function prepareImageAssets(file: File): Promise<PreparedImageAssets> {
-  const displayBlob = await resizeImage(file, 1280, 0.84);
-  const [thumbBlob, imageBase64] = await Promise.all([
-    resizeImage(file, 360, 0.8),
-    blobToDataUrl(displayBlob).then((url) => url.split(",")[1] ?? ""),
-  ]);
-  const previewUrl = URL.createObjectURL(displayBlob);
+  const decodedImage = await decodeImage(file);
 
-  return {
-    displayBlob,
-    thumbBlob,
-    previewUrl,
-    imageBase64,
-    mimeType: displayBlob.type || "image/webp",
-  };
+  try {
+    const [displayBlob, thumbBlob] = await Promise.all([
+      resizeDecodedImage(decodedImage, 1280, 0.84),
+      resizeDecodedImage(decodedImage, 360, 0.8),
+    ]);
+    const [previewUrl, imageBase64] = [
+      URL.createObjectURL(displayBlob),
+      await blobToDataUrl(displayBlob).then((url) => url.split(",")[1] ?? ""),
+    ];
+
+    return {
+      displayBlob,
+      thumbBlob,
+      previewUrl,
+      imageBase64,
+      mimeType: displayBlob.type || "image/webp",
+    };
+  } finally {
+    decodedImage.close();
+  }
 }
 
 export function releasePreparedImageAssets(assets?: PreparedImageAssets | null) {

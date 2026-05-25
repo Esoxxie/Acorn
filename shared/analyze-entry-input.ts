@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { AnalyzeEntryInput } from "./models";
 
 const nullableOptionalString = z.string().optional().nullable();
+export const ANALYZE_ENTRY_TEXT_LIMIT = 2_000;
+
 const nullableOptionalLimitedString = (maxLength: number) => z.string().max(maxLength).optional().nullable();
 
 export const analyzeEntryInputSchema = z
@@ -9,10 +11,9 @@ export const analyzeEntryInputSchema = z
     mode: z.enum(["photo", "manual_ai"]),
     imageBase64: z.string().max(5_242_880).optional().nullable(),
     mimeType: nullableOptionalString,
-    manualText: nullableOptionalLimitedString(500),
-    userContext: nullableOptionalLimitedString(500),
+    manualText: nullableOptionalLimitedString(ANALYZE_ENTRY_TEXT_LIMIT),
+    userContext: nullableOptionalLimitedString(ANALYZE_ENTRY_TEXT_LIMIT),
     priorEstimate: z.unknown().optional(),
-    refinementAnswers: z.record(z.string(), z.string()).optional().nullable(),
   })
   .superRefine((value, ctx) => {
     if (value.mode === "photo" && !value.imageBase64) {
@@ -50,6 +51,5 @@ export function normalizeAnalyzeEntryInput(
     manualText: input.manualText ?? undefined,
     userContext: input.userContext ?? undefined,
     priorEstimate: input.priorEstimate as AnalyzeEntryInput["priorEstimate"],
-    refinementAnswers: input.refinementAnswers ?? undefined,
   };
 }

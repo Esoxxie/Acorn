@@ -47,6 +47,30 @@ export function createMealSnapshot(source: Pick<MealEstimate, "calories" | "macr
   };
 }
 
+export function createMealSnapshotFromItems(items: EstimateItem[]): MealSnapshot {
+  const snapshotItems = cloneMealItems(items).map((item) => ({
+    ...item,
+    calories: roundKcal(item.calories),
+    macros: {
+      protein: roundMacro(item.macros.protein),
+      carbs: roundMacro(item.macros.carbs),
+      fat: roundMacro(item.macros.fat),
+      fiber: item.macros.fiber == null ? null : roundMacro(item.macros.fiber),
+    },
+  }));
+
+  return {
+    calories: snapshotItems.reduce((total, item) => total + item.calories, 0),
+    macros: {
+      protein: roundMacro(snapshotItems.reduce((total, item) => total + item.macros.protein, 0)),
+      carbs: roundMacro(snapshotItems.reduce((total, item) => total + item.macros.carbs, 0)),
+      fat: roundMacro(snapshotItems.reduce((total, item) => total + item.macros.fat, 0)),
+      fiber: roundMacro(snapshotItems.reduce((total, item) => total + (item.macros.fiber ?? 0), 0)),
+    },
+    items: snapshotItems,
+  };
+}
+
 export function scaleMealSnapshot(snapshot: MealSnapshot, servings: number): MealSnapshot {
   const safeServings = Math.max(1, servings);
 
@@ -100,6 +124,7 @@ export function computeDailyCoverage(calories: number, dailySpendKcal?: number |
 
 export function scaleEstimate(estimate: MealEstimate, multiplier: number): MealEstimate {
   const safeMultiplier = Math.max(0.25, multiplier);
+  const portionSuffix = safeMultiplier === 1 ? "" : ` x${safeMultiplier}`;
 
   return {
     ...estimate,
@@ -119,7 +144,7 @@ export function scaleEstimate(estimate: MealEstimate, multiplier: number): MealE
         fat: roundMacro(item.macros.fat * safeMultiplier),
         fiber: item.macros.fiber == null ? null : roundMacro(item.macros.fiber * safeMultiplier),
       },
-      portion: `${item.portion} x${safeMultiplier}`,
+      portion: `${item.portion}${portionSuffix}`,
     })),
   };
 }

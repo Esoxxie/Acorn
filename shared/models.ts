@@ -64,7 +64,6 @@ export type AnalyzeEntryInput = {
   manualText?: string;
   userContext?: string;
   priorEstimate?: MealEstimate;
-  refinementAnswers?: Record<string, string>;
 };
 
 export type MealSource = "photo" | "manual_ai" | "saved_food";

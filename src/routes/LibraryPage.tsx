@@ -1,16 +1,25 @@
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { useState } from "react";
-import type { MealRecord } from "../../shared/models";
+import type { MealEstimate, MealRecord } from "../../shared/models";
 import { useAppData } from "../app/contexts";
 import { MealCard } from "../components/MealCard";
 import { useLogFlow } from "../features/log/LogFlow";
 import { uiCopy } from "../lib/copy";
 import { getFoodIcon } from "../lib/food-icons";
 import { formatCalories, formatDateLabel } from "../lib/format";
+import { createTimestampForLocalDay, getLocalDayKey } from "../../shared/date";
 import "../styles/meal-surfaces.css";
 
 export function LibraryPage() {
-  const { meals, savedFoods, quickLogSavedFood, toggleMealFavorite, deleteMeal, updateMealServings } = useAppData();
+  const {
+    meals,
+    savedFoods,
+    quickLogSavedFood,
+    saveMeal,
+    toggleMealFavorite,
+    deleteMeal,
+    updateMealServings,
+  } = useAppData();
   const { openEditMeal } = useLogFlow();
   const [search, setSearch] = useState("");
   const [expandedMealId, setExpandedMealId] = useState<string | null>(null);
@@ -25,11 +34,42 @@ export function LibraryPage() {
   });
 
   const grouped = visibleMeals.reduce<Record<string, MealRecord[]>>((accumulator, meal) => {
-    const key = meal.loggedAt.slice(0, 10);
+    const key = getLocalDayKey(meal.loggedAt);
     accumulator[key] = accumulator[key] ?? [];
     accumulator[key].push(meal);
     return accumulator;
   }, {});
+
+  function mealToEstimate(meal: MealRecord): MealEstimate {
+    return {
+      mealTitle: meal.mealTitle,
+      summary: meal.summary,
+      items: meal.items,
+      calories: meal.calories,
+      macros: meal.macros,
+      confidence: meal.confidence,
+      assumptions: meal.assumptions,
+      refinementQuestions: [],
+    };
+  }
+
+  async function relogMeal(meal: MealRecord) {
+    const savedFood = meal.savedFoodId
+      ? savedFoods.find((currentSavedFood) => currentSavedFood.id === meal.savedFoodId)
+      : null;
+
+    if (savedFood) {
+      await quickLogSavedFood(savedFood, 1);
+      return;
+    }
+
+    await saveMeal({
+      source: "saved_food",
+      estimate: mealToEstimate(meal),
+      userContext: meal.userContext,
+      transcript: meal.transcript,
+    });
+  }
 
   return (
     <div className="page-stack">
@@ -91,7 +131,7 @@ export function LibraryPage() {
         {Object.entries(grouped).map(([day, dayMeals]) => (
           <section className="section-card" key={day}>
             <div className="section-card__header">
-              <h2>{formatDateLabel(`${day}T00:00:00.000Z`)}</h2>
+              <h2>{formatDateLabel(createTimestampForLocalDay(day))}</h2>
             </div>
             <div className="stack">
               {dayMeals.map((meal) => (
@@ -102,16 +142,7 @@ export function LibraryPage() {
                   onDelete={deleteMeal}
                   onEdit={openEditMeal}
                   onFavorite={toggleMealFavorite}
-                  onRelog={
-                    meal.savedFoodId
-                      ? async () => {
-                          const match = savedFoods.find((savedFood) => savedFood.id === meal.savedFoodId);
-                          if (match) {
-                            await quickLogSavedFood(match, 1);
-                          }
-                        }
-                      : undefined
-                  }
+                  onRelog={relogMeal}
                   onToggleExpand={(currentMeal) =>
                     setExpandedMealId((activeMealId) => (activeMealId === currentMeal.id ? null : currentMeal.id))
                   }

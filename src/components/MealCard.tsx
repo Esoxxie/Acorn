@@ -148,6 +148,19 @@ export function MealCard({
       </button>
 
       <div className="meal-card__actions meal-card__actions--footer">
+        {onRelog ? (
+          <>
+            <button
+              aria-label={`${meal.mealTitle} erneut hinzufügen`}
+              className="meal-card__action-button"
+              onClick={() => void onRelog(meal)}
+              type="button"
+            >
+              <Repeat2 size={16} />
+            </button>
+            <span aria-hidden="true" className="meal-card__action-divider" />
+          </>
+        ) : null}
         <button
           aria-label={meal.favorite ? `${meal.mealTitle} aus Favoriten entfernen` : `${meal.mealTitle} als Favorit merken`}
           className={`meal-card__action-button ${meal.favorite ? "is-active" : ""}`}
@@ -234,14 +247,6 @@ export function MealCard({
             </section>
           ) : null}
 
-          {onRelog ? (
-            <div className="meal-card__detail-actions">
-              <button className="pill-button" onClick={() => void onRelog(meal)} type="button">
-                <Repeat2 size={16} />
-                {uiCopy.mealCard.relog}
-              </button>
-            </div>
-          ) : null}
         </div>
       ) : null}
     </article>

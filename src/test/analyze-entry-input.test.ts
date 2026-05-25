@@ -9,7 +9,6 @@ describe("analyzeEntryInputSchema", () => {
       mimeType: null,
       manualText: "test",
       userContext: null,
-      refinementAnswers: null,
     });
 
     expect(parsed.success).toBe(true);
@@ -24,7 +23,6 @@ describe("analyzeEntryInputSchema", () => {
       manualText: "test",
       userContext: undefined,
       priorEstimate: undefined,
-      refinementAnswers: undefined,
     });
   });
 
@@ -40,5 +38,25 @@ describe("analyzeEntryInputSchema", () => {
     }
 
     expect(parsed.error.issues[0]?.message).toBe("A description is required for manual mode.");
+  });
+
+  it("accepts manual text and user context up to 2,000 characters", () => {
+    const longText = "a".repeat(2_000);
+    const parsed = analyzeEntryInputSchema.safeParse({
+      mode: "manual_ai",
+      manualText: longText,
+      userContext: longText,
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects manual text over 2,000 characters", () => {
+    const parsed = analyzeEntryInputSchema.safeParse({
+      mode: "manual_ai",
+      manualText: "a".repeat(2_001),
+    });
+
+    expect(parsed.success).toBe(false);
   });
 });

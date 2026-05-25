@@ -98,16 +98,7 @@ describe("Gemini meal estimate contract", () => {
           fiber: 0,
         },
       ],
-      refinementQuestions: [
-        {
-          question: "Wie viel Sauce wurde verwendet?",
-          detail: "Sauce kann die Kalorien deutlich verändern.",
-          options: [
-            { value: "light", detail: "Fast keine Sauce." },
-            { text: "Normal", detail: null },
-          ],
-        },
-      ],
+      refinementQuestions: [],
     });
 
     expect(estimate.mealTitle).toBe("Hähnchen-Reis-Bowl");
@@ -118,15 +109,7 @@ describe("Gemini meal estimate contract", () => {
       portion: "150 g",
       calories: 280,
     });
-    expect(estimate.refinementQuestions[0]).toEqual({
-      id: "wie-viel-sauce-wurde-verwendet",
-      label: "Wie viel Sauce wurde verwendet?",
-      helperText: "Sauce kann die Kalorien deutlich verändern.",
-      options: [
-        { id: "light", label: "light", detail: "Fast keine Sauce." },
-        { id: "normal", label: "Normal", detail: null },
-      ],
-    });
+    expect(estimate.refinementQuestions).toEqual([]);
   });
 
   it("fails clearly when required fields are missing after compatibility coercion", () => {
@@ -141,22 +124,6 @@ describe("Gemini meal estimate contract", () => {
         refinementQuestions: [],
       }),
     ).toThrow("enthält kein mealTitle");
-  });
-
-  it("rejects invalid refinement question option counts", () => {
-    expect(() =>
-      normalizeEstimate({
-        ...canonicalEstimate,
-        refinementQuestions: [
-          {
-            id: "portion-size",
-            label: "How big was the portion?",
-            helperText: null,
-            options: [{ id: "regular", label: "Regular", detail: null }],
-          },
-        ],
-      }),
-    ).toThrow();
   });
 
   it("normalizes relaxed confidence values from Gemini", () => {
@@ -201,7 +168,7 @@ describe("Gemini meal estimate contract", () => {
       text: JSON.stringify(canonicalEstimate),
     });
 
-    await runGeminiMealAnalysis(baseInput, { apiKey: "test-key", model: "gemini-2.5-flash" });
+    await runGeminiMealAnalysis(baseInput, { apiKey: "test-key", model: "gemini-3.5-flash" });
 
     expect(generateContent).toHaveBeenCalledTimes(1);
     const request = generateContent.mock.calls[0]?.[0];
@@ -213,21 +180,15 @@ describe("Gemini meal estimate contract", () => {
     expect(request.config.responseJsonSchema.properties.items.minItems).toBeUndefined();
     expect(request.config.responseJsonSchema.properties.macros.properties.fiber.type).toEqual(["number", "null"]);
     expect(request.config.responseJsonSchema.properties.items.items.properties.notes.type).toEqual(["string", "null"]);
-    expect(request.config.responseJsonSchema.properties.refinementQuestions.items.properties.helperText.type).toEqual([
-      "string",
-      "null",
-    ]);
-    expect(request.config.responseJsonSchema.properties.refinementQuestions.maxItems).toBeUndefined();
-    expect(
-      request.config.responseJsonSchema.properties.refinementQuestions.items.properties.options.items.properties.detail.type,
-    ).toEqual(["string", "null"]);
+    expect(request.config.responseJsonSchema.required).not.toContain("refinementQuestions");
+    expect(request.config.responseJsonSchema.properties.refinementQuestions).toBeUndefined();
   });
 
   it("rejects empty Gemini responses", async () => {
     generateContent.mockResolvedValue({ text: "" });
 
     await expect(
-      runGeminiMealAnalysis(baseInput, { apiKey: "test-key", model: "gemini-2.5-flash" }),
+      runGeminiMealAnalysis(baseInput, { apiKey: "test-key", model: "gemini-3.5-flash" }),
     ).rejects.toThrow("Gemini hat eine leere Antwort zurückgegeben.");
   });
 
@@ -236,13 +197,13 @@ describe("Gemini meal estimate contract", () => {
     generateContent.mockResolvedValue({ text: "{not-valid-json" });
 
     await expect(
-      runGeminiMealAnalysis(baseInput, { apiKey: "test-key", model: "gemini-2.5-flash" }),
+      runGeminiMealAnalysis(baseInput, { apiKey: "test-key", model: "gemini-3.5-flash" }),
     ).rejects.toThrow("Gemini hat ungültiges JSON zurückgegeben");
 
     expect(consoleError).toHaveBeenCalledWith(
       "Die Antwort der Gemini-Mahlzeitenanalyse konnte nicht validiert werden.",
       expect.objectContaining({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.5-flash",
         mode: "manual_ai",
       }),
     );
@@ -255,7 +216,7 @@ describe("Gemini meal estimate contract", () => {
 
     expect(system).toContain("Du bist Acorn");
     expect(system).toContain("confidence ist ein ganzzahliger Wert von 1 bis 99");
-    expect(system).toContain("refinementQuestions");
+    expect(system).toContain("Nutzer korrigieren Schätzungen manuell");
   });
 
   it("builds a user prompt with only dynamic context", () => {
@@ -264,6 +225,7 @@ describe("Gemini meal estimate contract", () => {
     expect(prompt).toContain("Hähnchen-Reis-Bowl");
     expect(prompt).toContain("Nutzerkontext: keiner");
     expect(prompt).not.toContain("Du bist Acorn");
+    expect(prompt).not.toContain("Verfeinerungsanfrage");
   });
 
   it("passes system instruction to Gemini config", async () => {
@@ -271,7 +233,7 @@ describe("Gemini meal estimate contract", () => {
       text: JSON.stringify(canonicalEstimate),
     });
 
-    await runGeminiMealAnalysis(baseInput, { apiKey: "test-key", model: "gemini-2.5-flash" });
+    await runGeminiMealAnalysis(baseInput, { apiKey: "test-key", model: "gemini-3.5-flash" });
 
     const request = generateContent.mock.calls[0]?.[0];
     expect(request.config.systemInstruction).toBe(buildSystemInstruction());

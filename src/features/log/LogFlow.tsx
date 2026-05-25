@@ -1,6 +1,6 @@
-import { Camera, Star, Wand2 } from "lucide-react";
-import { createContext, useContext, useEffect, useState, type ChangeEvent, type PropsWithChildren } from "react";
-import type { MealEstimate, MealRecord } from "../../../shared/models";
+import { Camera, PencilLine, Plus, Star, Trash2 } from "lucide-react";
+import { createContext, useContext, useEffect, useRef, useState, type ChangeEvent, type PropsWithChildren } from "react";
+import type { EstimateItem, MealEstimate, MealRecord } from "../../../shared/models";
 import { useAppData, useAuth } from "../../app/contexts";
 import { BottomSheet } from "../../components/BottomSheet";
 import { ConfidencePill } from "../../components/NutritionVisuals";
@@ -11,11 +11,28 @@ import { analyzeEntry } from "../../lib/firebase";
 import { createDemoEstimate } from "../../lib/demo-estimate";
 import { formatCalories, formatMacro } from "../../lib/format";
 import { prepareImageAssets, releasePreparedImageAssets, type PreparedImageAssets } from "../../lib/image";
-import { createMealSnapshot } from "../../../shared/calorie";
+import { createMealSnapshot, createMealSnapshotFromItems } from "../../../shared/calorie";
 import { resolveStorageUrl } from "../../lib/storage";
 import "../../styles/meal-surfaces.css";
 
-type FlowStep = "composer" | "estimate" | "refine";
+type FlowStep = "composer" | "estimate" | "manualEdit";
+
+type EditableItem = {
+  id: string;
+  name: string;
+  portion: string;
+  calories: string;
+  protein: string;
+  carbs: string;
+  fat: string;
+  fiber: string;
+};
+
+type EditDraft = {
+  mealTitle: string;
+  summary: string;
+  items: EditableItem[];
+};
 
 type LogFlowContextValue = {
   openLogFlow: () => void;
@@ -31,7 +48,6 @@ async function getEstimate(input: {
   manualText?: string;
   userContext?: string;
   priorEstimate?: MealEstimate;
-  refinementAnswers?: Record<string, string>;
 }, useDemoEstimator: boolean) {
   if (useDemoEstimator) {
     return { data: createDemoEstimate(input) };
@@ -60,6 +76,94 @@ function mealToEstimate(meal: MealRecord): MealEstimate {
   };
 }
 
+function formatDraftNumber(value: number | null | undefined): string {
+  if (value == null) {
+    return "";
+  }
+
+  return String(Math.round(value * 10) / 10);
+}
+
+function itemToEditableItem(item: EstimateItem): EditableItem {
+  return {
+    id: item.id,
+    name: item.name,
+    portion: item.portion,
+    calories: formatDraftNumber(item.calories),
+    protein: formatDraftNumber(item.macros.protein),
+    carbs: formatDraftNumber(item.macros.carbs),
+    fat: formatDraftNumber(item.macros.fat),
+    fiber: formatDraftNumber(item.macros.fiber),
+  };
+}
+
+function estimateToEditDraft(nextEstimate: MealEstimate): EditDraft {
+  return {
+    mealTitle: nextEstimate.mealTitle,
+    summary: nextEstimate.summary,
+    items: nextEstimate.items.length ? nextEstimate.items.map(itemToEditableItem) : [createBlankEditableItem()],
+  };
+}
+
+function createBlankEditableItem(): EditableItem {
+  const id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `item-${Date.now()}`;
+
+  return {
+    id,
+    name: "",
+    portion: "",
+    calories: "",
+    protein: "",
+    carbs: "",
+    fat: "",
+    fiber: "",
+  };
+}
+
+function parseDraftNumber(value: string): number | null {
+  if (!value.trim()) {
+    return null;
+  }
+
+  const parsed = Number(value.replace(",", "."));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function normalizeEditableItems(items: EditableItem[]): EstimateItem[] | null {
+  const normalizedItems = items.map((item) => {
+    const calories = parseDraftNumber(item.calories);
+    const protein = parseDraftNumber(item.protein) ?? 0;
+    const carbs = parseDraftNumber(item.carbs) ?? 0;
+    const fat = parseDraftNumber(item.fat) ?? 0;
+    const fiber = parseDraftNumber(item.fiber);
+
+    if (!item.name.trim() || !item.portion.trim() || calories == null) {
+      return null;
+    }
+
+    return {
+      id: item.id,
+      name: item.name.trim(),
+      portion: item.portion.trim(),
+      calories,
+      macros: {
+        protein,
+        carbs,
+        fat,
+        fiber,
+      },
+      confidence: null,
+      notes: null,
+    };
+  });
+
+  if (normalizedItems.some((item) => item == null)) {
+    return null;
+  }
+
+  return normalizedItems as EstimateItem[];
+}
+
 export function LogFlowProvider({ children }: PropsWithChildren) {
   const { saveMeal, updateMeal } = useAppData();
   const { user } = useAuth();
@@ -68,13 +172,17 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
   const [step, setStep] = useState<FlowStep>("composer");
   const [file, setFile] = useState<File | null>(null);
   const [preparedAssets, setPreparedAssets] = useState<PreparedImageAssets | null>(null);
+  const [instantPreviewUrl, setInstantPreviewUrl] = useState<string | null>(null);
   const [existingPhotoUrl, setExistingPhotoUrl] = useState<string | null>(null);
   const [entryText, setEntryText] = useState("");
   const [estimate, setEstimate] = useState<MealEstimate | null>(null);
-  const [refinementAnswers, setRefinementAnswers] = useState<Record<string, string>>({});
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const instantPreviewUrlRef = useRef<string | null>(null);
+  const imagePreparationIdRef = useRef(0);
+  const imagePreparationPromiseRef = useRef<Promise<PreparedImageAssets> | null>(null);
 
   useEffect(() => {
     return () => {
@@ -82,8 +190,28 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
     };
   }, [preparedAssets]);
 
+  useEffect(() => {
+    return () => {
+      if (instantPreviewUrlRef.current) {
+        URL.revokeObjectURL(instantPreviewUrlRef.current);
+      }
+    };
+  }, []);
+
+  function replaceInstantPreviewUrl(nextUrl: string | null) {
+    if (instantPreviewUrlRef.current) {
+      URL.revokeObjectURL(instantPreviewUrlRef.current);
+    }
+
+    instantPreviewUrlRef.current = nextUrl;
+    setInstantPreviewUrl(nextUrl);
+  }
+
   function resetState() {
+    imagePreparationIdRef.current += 1;
+    imagePreparationPromiseRef.current = null;
     releasePreparedImageAssets(preparedAssets);
+    replaceInstantPreviewUrl(null);
     setEditingMeal(null);
     setStep("composer");
     setFile(null);
@@ -91,7 +219,7 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
     setExistingPhotoUrl(null);
     setEntryText("");
     setEstimate(null);
-    setRefinementAnswers({});
+    setEditDraft(null);
     setAnalyzing(false);
     setSaving(false);
     setError(null);
@@ -107,7 +235,12 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
     setEditingMeal(meal);
     setEntryText(meal.transcript ?? meal.userContext ?? meal.summary ?? meal.mealTitle);
     setEstimate(mealToEstimate(meal));
-    setStep("estimate");
+    setEditDraft({
+      mealTitle: meal.mealTitle,
+      summary: meal.summary,
+      items: meal.items.length ? meal.items.map(itemToEditableItem) : [createBlankEditableItem()],
+    });
+    setStep("manualEdit");
     setOpen(true);
   }
 
@@ -153,7 +286,7 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
     try {
       let assets = preparedAssets;
       if (file) {
-        assets = assets ?? (await prepareImageAssets(file));
+        assets = assets ?? (imagePreparationPromiseRef.current ? await imagePreparationPromiseRef.current : await prepareImageAssets(file));
         setPreparedAssets(assets);
       }
 
@@ -163,34 +296,6 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
         mimeType: assets?.mimeType,
         manualText: file ? undefined : entryText.trim(),
         userContext: file ? entryText.trim() || undefined : undefined,
-      }, appEnv.usingDemoConfig || Boolean(user?.isDemo));
-
-      setEstimate(response.data);
-      setStep("estimate");
-    } catch (caughtError) {
-      setError(getErrorMessage(caughtError));
-    } finally {
-      setAnalyzing(false);
-    }
-  }
-
-  async function applyRefinement() {
-    if (!estimate) {
-      return;
-    }
-
-    setAnalyzing(true);
-    setError(null);
-
-    try {
-      const response = await getEstimate({
-        mode: file ? "photo" : "manual_ai",
-        imageBase64: preparedAssets?.imageBase64,
-        mimeType: preparedAssets?.mimeType,
-        manualText: file ? undefined : entryText.trim() || undefined,
-        userContext: file ? entryText.trim() || undefined : undefined,
-        priorEstimate: estimate,
-        refinementAnswers,
       }, appEnv.usingDemoConfig || Boolean(user?.isDemo));
 
       setEstimate(response.data);
@@ -241,31 +346,104 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
     }
   }
 
+  async function saveManualEdit() {
+    if (!editDraft) {
+      return;
+    }
+
+    const normalizedItems = normalizeEditableItems(editDraft.items);
+    const mealTitle = editDraft.mealTitle.trim();
+    if (!mealTitle || !normalizedItems?.length) {
+      setError(uiCopy.logFlow.manualEditError);
+      return;
+    }
+
+    const baseSnapshot = createMealSnapshotFromItems(normalizedItems);
+    setSaving(true);
+    setError(null);
+
+    try {
+      if (editingMeal) {
+        await updateMeal(editingMeal, {
+          mealTitle,
+          summary: editDraft.summary.trim(),
+          transcript: entryText.trim() || null,
+          baseSnapshot,
+        });
+      } else {
+        await saveMeal({
+          source: file ? "photo" : "manual_ai",
+          estimate: {
+            mealTitle,
+            summary: editDraft.summary.trim(),
+            items: baseSnapshot.items,
+            calories: baseSnapshot.calories,
+            macros: baseSnapshot.macros,
+            confidence: estimate?.confidence ?? 80,
+            assumptions: estimate?.assumptions ?? [],
+            refinementQuestions: [],
+          },
+          photoAssets: file ? preparedAssets : undefined,
+          userContext: file ? entryText.trim() || null : null,
+          transcript: entryText.trim() || null,
+        });
+      }
+      closeLogFlow();
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
     const nextFile = event.target.files?.[0] ?? null;
+    const preparationId = imagePreparationIdRef.current + 1;
+    imagePreparationIdRef.current = preparationId;
+    imagePreparationPromiseRef.current = null;
 
     releasePreparedImageAssets(preparedAssets);
+    replaceInstantPreviewUrl(null);
     setPreparedAssets(null);
     setFile(nextFile);
     setError(null);
 
     if (!nextFile) {
+      event.target.value = "";
       return;
     }
 
+    replaceInstantPreviewUrl(URL.createObjectURL(nextFile));
+
     try {
-      const assets = await prepareImageAssets(nextFile);
+      const preparationPromise = prepareImageAssets(nextFile);
+      imagePreparationPromiseRef.current = preparationPromise;
+      const assets = await preparationPromise;
+
+      if (imagePreparationIdRef.current !== preparationId) {
+        releasePreparedImageAssets(assets);
+        return;
+      }
+
       setPreparedAssets(assets);
+      replaceInstantPreviewUrl(null);
     } catch (caughtError) {
-      setFile(null);
-      setError(getErrorMessage(caughtError));
+      if (imagePreparationIdRef.current === preparationId) {
+        imagePreparationPromiseRef.current = null;
+        setFile(null);
+        replaceInstantPreviewUrl(null);
+        setError(getErrorMessage(caughtError));
+      }
     } finally {
+      if (imagePreparationIdRef.current === preparationId) {
+        imagePreparationPromiseRef.current = null;
+      }
       event.target.value = "";
     }
   }
 
   function renderComposer() {
-    const previewUrl = preparedAssets?.previewUrl ?? existingPhotoUrl;
+    const previewUrl = preparedAssets?.previewUrl ?? instantPreviewUrl ?? existingPhotoUrl;
 
     return (
       <div className="stack">
@@ -326,7 +504,7 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
       return null;
     }
 
-    const previewUrl = preparedAssets?.previewUrl ?? existingPhotoUrl;
+    const previewUrl = preparedAssets?.previewUrl ?? instantPreviewUrl ?? existingPhotoUrl;
 
     return (
       <div className="stack">
@@ -334,36 +512,29 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
           <img alt={uiCopy.logFlow.mealPreview} className="estimate-hero" src={previewUrl} />
         ) : null}
 
-        <section className="estimate-card">
-          <div className="estimate-card__header">
-            <div>
+        <section className="estimate-card estimate-card--review">
+          <div className="estimate-card__header estimate-card__header--review">
+            <div className="estimate-card__title">
               <h3>{estimate.mealTitle}</h3>
               <p>{estimate.summary}</p>
             </div>
             <div className="estimate-card__kcal">
-              <strong>{formatCalories(estimate.calories)}</strong>
+              <strong>{Math.round(estimate.calories)}</strong>
+              <span>kcal</span>
             </div>
           </div>
 
-          <div className="macro-row">
+          <div className="macro-row macro-row--compact">
             <span className="macro-pill macro-pill--protein">P {formatMacro(estimate.macros.protein)}</span>
             <span className="macro-pill macro-pill--carbs">C {formatMacro(estimate.macros.carbs)}</span>
             <span className="macro-pill macro-pill--fat">F {formatMacro(estimate.macros.fat)}</span>
-          </div>
-
-          <div className="chip-wrap">
             <ConfidencePill confidence={estimate.confidence} />
           </div>
 
           {estimate.assumptions.length ? (
-            <div className="stack">
-              <p className="status-text">{uiCopy.logFlow.assumptions}</p>
+            <div className="estimate-assumptions">
               {estimate.assumptions.map((assumption) => (
-                <div className="estimate-item" key={assumption}>
-                  <div>
-                    <strong>{assumption}</strong>
-                  </div>
-                </div>
+                <p key={assumption}>{assumption}</p>
               ))}
             </div>
           ) : null}
@@ -385,12 +556,17 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
           <button className="secondary-button" onClick={() => setStep("composer")} type="button">
             {uiCopy.logFlow.back}
           </button>
-          {estimate.refinementQuestions.length ? (
-            <button className="secondary-button" onClick={() => setStep("refine")} type="button">
-              <Wand2 size={18} />
-              {uiCopy.logFlow.refine}
-            </button>
-          ) : null}
+          <button
+            className="secondary-button"
+            onClick={() => {
+              setEditDraft(estimateToEditDraft(estimate));
+              setStep("manualEdit");
+            }}
+            type="button"
+          >
+            <PencilLine size={18} />
+            {uiCopy.mealCard.edit}
+          </button>
           <button className="primary-button" disabled={saving} onClick={() => void saveCurrentMeal()} type="button">
             <Star size={18} />
             {saving ? uiCopy.logFlow.saving : uiCopy.logFlow.save}
@@ -400,44 +576,168 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
     );
   }
 
-  function renderRefineStep() {
-    if (!estimate) {
+  function updateEditableItem(itemId: string, patch: Partial<EditableItem>) {
+    setEditDraft((current) =>
+      current
+        ? {
+            ...current,
+            items: current.items.map((item) => (item.id === itemId ? { ...item, ...patch } : item)),
+          }
+        : current,
+    );
+  }
+
+  function renderManualEditStep() {
+    if (!editDraft) {
       return null;
     }
 
+    const normalizedItems = normalizeEditableItems(editDraft.items);
+    const snapshot = normalizedItems?.length ? createMealSnapshotFromItems(normalizedItems) : null;
+
     return (
       <div className="stack">
-        {estimate.refinementQuestions.map((question) => (
-          <section className="section-card" key={question.id}>
-            <div className="section-card__header">
-              <h3>{question.label}</h3>
+        <section className="estimate-card manual-edit-card">
+          <div className="form-grid">
+            <label>
+              <span>{uiCopy.logFlow.mealTitle}</span>
+              <input
+                onChange={(event) =>
+                  setEditDraft((current) => (current ? { ...current, mealTitle: event.target.value } : current))
+                }
+                value={editDraft.mealTitle}
+              />
+            </label>
+            <label>
+              <span>{uiCopy.logFlow.mealSummary}</span>
+              <textarea
+                onChange={(event) =>
+                  setEditDraft((current) => (current ? { ...current, summary: event.target.value } : current))
+                }
+                rows={2}
+                value={editDraft.summary}
+              />
+            </label>
+          </div>
+        </section>
+
+        {snapshot ? (
+          <section className="estimate-card manual-edit-total">
+            <div>
+              <span>{uiCopy.summary.consumed}</span>
+              <strong>{formatCalories(snapshot.calories)}</strong>
             </div>
-            <div className="chip-wrap">
-              {question.options.map((option) => (
+            <div className="macro-row">
+              <span>P {formatMacro(snapshot.macros.protein)}</span>
+              <span>C {formatMacro(snapshot.macros.carbs)}</span>
+              <span>F {formatMacro(snapshot.macros.fat)}</span>
+            </div>
+          </section>
+        ) : null}
+
+        <div className="manual-item-list">
+          {editDraft.items.map((item, index) => (
+            <section className="estimate-card manual-item-card" key={item.id}>
+              <div className="manual-item-card__header">
+                <h3>{`#${index + 1}`}</h3>
                 <button
-                  className={`chip ${refinementAnswers[question.id] === option.id ? "chip--selected" : ""}`}
-                  key={option.id}
+                  aria-label={uiCopy.logFlow.removeItem}
+                  className="icon-button"
+                  disabled={editDraft.items.length <= 1}
                   onClick={() =>
-                    setRefinementAnswers((current) => ({
-                      ...current,
-                      [question.id]: option.id,
-                    }))
+                    setEditDraft((current) =>
+                      current
+                        ? {
+                            ...current,
+                            items: current.items.filter((currentItem) => currentItem.id !== item.id),
+                          }
+                        : current,
+                    )
                   }
                   type="button"
                 >
-                  {option.label}
+                  <Trash2 size={16} />
                 </button>
-              ))}
-            </div>
-          </section>
-        ))}
+              </div>
+
+              <div className="manual-item-grid">
+                <label className="manual-item-grid__wide">
+                  <span>{uiCopy.logFlow.itemName}</span>
+                  <input onChange={(event) => updateEditableItem(item.id, { name: event.target.value })} value={item.name} />
+                </label>
+                <label className="manual-item-grid__wide">
+                  <span>{uiCopy.logFlow.itemPortion}</span>
+                  <input
+                    onChange={(event) => updateEditableItem(item.id, { portion: event.target.value })}
+                    value={item.portion}
+                  />
+                </label>
+                <label>
+                  <span>{uiCopy.logFlow.itemCalories}</span>
+                  <input
+                    inputMode="decimal"
+                    onChange={(event) => updateEditableItem(item.id, { calories: event.target.value })}
+                    value={item.calories}
+                  />
+                </label>
+                <label>
+                  <span>{uiCopy.logFlow.itemProtein}</span>
+                  <input
+                    inputMode="decimal"
+                    onChange={(event) => updateEditableItem(item.id, { protein: event.target.value })}
+                    value={item.protein}
+                  />
+                </label>
+                <label>
+                  <span>{uiCopy.logFlow.itemCarbs}</span>
+                  <input
+                    inputMode="decimal"
+                    onChange={(event) => updateEditableItem(item.id, { carbs: event.target.value })}
+                    value={item.carbs}
+                  />
+                </label>
+                <label>
+                  <span>{uiCopy.logFlow.itemFat}</span>
+                  <input
+                    inputMode="decimal"
+                    onChange={(event) => updateEditableItem(item.id, { fat: event.target.value })}
+                    value={item.fat}
+                  />
+                </label>
+                <label>
+                  <span>{uiCopy.logFlow.itemFiber}</span>
+                  <input
+                    inputMode="decimal"
+                    onChange={(event) => updateEditableItem(item.id, { fiber: event.target.value })}
+                    value={item.fiber}
+                  />
+                </label>
+              </div>
+            </section>
+          ))}
+        </div>
 
         <div className="sheet__actions">
-          <button className="secondary-button" onClick={() => setStep("estimate")} type="button">
-            {uiCopy.logFlow.back}
+          {!editingMeal ? (
+            <button className="secondary-button" onClick={() => setStep("estimate")} type="button">
+              {uiCopy.logFlow.back}
+            </button>
+          ) : null}
+          <button
+            className="secondary-button"
+            onClick={() =>
+              setEditDraft((current) =>
+                current ? { ...current, items: [...current.items, createBlankEditableItem()] } : current,
+              )
+            }
+            type="button"
+          >
+            <Plus size={18} />
+            {uiCopy.logFlow.addItem}
           </button>
-          <button className="primary-button" disabled={analyzing} onClick={() => void applyRefinement()} type="button">
-            {analyzing ? uiCopy.logFlow.updating : uiCopy.logFlow.update}
+          <button className="primary-button" disabled={saving} onClick={() => void saveManualEdit()} type="button">
+            <Star size={18} />
+            {saving ? uiCopy.logFlow.saving : uiCopy.logFlow.save}
           </button>
         </div>
       </div>
@@ -452,22 +752,22 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
         open={open}
         title={
           editingMeal
-            ? step === "composer"
+            ? step === "manualEdit"
+              ? uiCopy.logFlow.manualEdit
+              : step === "composer"
               ? uiCopy.logFlow.editEntry
-              : step === "refine"
-                ? uiCopy.logFlow.refine
-                : uiCopy.logFlow.reviewEdit
+              : uiCopy.logFlow.reviewEdit
             : step === "composer"
               ? uiCopy.logFlow.addEntry
-              : step === "refine"
-                ? uiCopy.logFlow.refine
-                : uiCopy.logFlow.estimate
+              : step === "manualEdit"
+                ? uiCopy.logFlow.manualEdit
+              : uiCopy.logFlow.estimate
         }
       >
         {error ? <div className="inline-error">{error}</div> : null}
         {step === "composer" ? renderComposer() : null}
         {step === "estimate" ? renderEstimateStep() : null}
-        {step === "refine" ? renderRefineStep() : null}
+        {step === "manualEdit" ? renderManualEditStep() : null}
       </BottomSheet>
     </LogFlowContext.Provider>
   );

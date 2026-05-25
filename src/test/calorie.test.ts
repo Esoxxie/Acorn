@@ -4,6 +4,7 @@ import {
   calculateTdee,
   computeDailyCoverage,
   createMealSnapshot,
+  createMealSnapshotFromItems,
   scaleEstimate,
   scaleMealSnapshot,
 } from "../../shared/calorie";
@@ -53,6 +54,7 @@ describe("calorie helpers", () => {
     const scaled = scaleEstimate(estimate, 1.5);
     expect(scaled.calories).toBe(480);
     expect(scaled.macros.protein).toBe(33);
+    expect(scaleEstimate(estimate, 1).items[0].portion).toBe("1 bowl");
   });
 
   it("creates and scales meal snapshots for servings changes", () => {
@@ -77,5 +79,27 @@ describe("calorie helpers", () => {
     expect(scaled.calories).toBe(750);
     expect(scaled.macros.protein).toBe(36.6);
     expect(scaled.items[0].portion).toBe("1 bowl x3");
+  });
+
+  it("creates meal snapshots from edited items", () => {
+    const snapshot = createMealSnapshotFromItems([
+      {
+        id: "rice",
+        name: "Rice",
+        portion: "120 g",
+        calories: 155.4,
+        macros: { protein: 3.2, carbs: 34.6, fat: 0.4, fiber: 1.1 },
+      },
+      {
+        id: "tofu",
+        name: "Tofu",
+        portion: "150 g",
+        calories: 210.2,
+        macros: { protein: 22.4, carbs: 2.1, fat: 12.7, fiber: null },
+      },
+    ]);
+
+    expect(snapshot.calories).toBe(365);
+    expect(snapshot.macros).toEqual({ protein: 25.6, carbs: 36.7, fat: 13.1, fiber: 1.1 });
   });
 });

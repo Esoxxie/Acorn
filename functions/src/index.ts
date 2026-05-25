@@ -12,7 +12,7 @@ if (!getApps().length) {
 
 const db = getFirestore();
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
-const GEMINI_MODEL = defineString("GEMINI_MODEL", { default: "gemini-3-flash-preview" });
+const GEMINI_MODEL = defineString("GEMINI_MODEL", { default: "gemini-3.5-flash" });
 const MAX_DAILY_AI_CALLS = defineString("MAX_DAILY_AI_CALLS", { default: "30" });
 
 function getUserSafeAnalyzeErrorMessage(error: unknown): string {
@@ -108,7 +108,7 @@ export const analyzeEntry = onCall(
 
       return await runGeminiMealAnalysis(normalizedInput, {
         apiKey,
-        model: GEMINI_MODEL.value() || process.env.GEMINI_MODEL || "gemini-3-flash-preview",
+        model: GEMINI_MODEL.value() || process.env.GEMINI_MODEL || "gemini-3.5-flash",
       });
     } catch (error) {
       if (error instanceof HttpsError) {

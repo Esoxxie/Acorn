@@ -91,7 +91,7 @@ type AppDataContextValue = {
   updateMeal: (meal: MealRecord, patch: MealUpdateInput) => Promise<void>;
   updateMealServings: (meal: MealRecord, servings: number) => Promise<void>;
   toggleMealFavorite: (meal: MealRecord) => Promise<void>;
-  quickLogSavedFood: (savedFood: SavedFood, multiplier: number) => Promise<void>;
+  quickLogSavedFood: (savedFood: SavedFood, multiplier: number, loggedAt?: string) => Promise<void>;
   deleteMeal: (meal: MealRecord) => Promise<void>;
 };
 
@@ -985,7 +985,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     });
   }
 
-  async function quickLogSavedFood(savedFood: SavedFood, multiplier: number) {
+  async function quickLogSavedFood(savedFood: SavedFood, multiplier: number, loggedAt?: string) {
     if (!user) {
       return;
     }
@@ -994,6 +994,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       const mealId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `meal-${Date.now()}`;
       const estimate = scaleEstimate(savedFoodToEstimate(savedFood), multiplier);
       const now = new Date().toISOString();
+      const mealLoggedAt = loggedAt ?? now;
       const nextMeals: MealRecord[] = [
         {
           id: mealId,
@@ -1005,7 +1006,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
           macros: estimate.macros,
           confidence: estimate.confidence,
           assumptions: [`Aus ${savedFood.title} mit Faktor x${multiplier} uebernommen.`],
-          loggedAt: now,
+          loggedAt: mealLoggedAt,
           createdAt: now,
           updatedAt: now,
           photo: null,
@@ -1041,6 +1042,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     const mealRef = doc(collection(db, `users/${user.uid}/meals`));
     const estimate = scaleEstimate(savedFoodToEstimate(savedFood), multiplier);
     const now = new Date().toISOString();
+    const mealLoggedAt = loggedAt ?? now;
 
     await setDoc(mealRef, {
       id: mealRef.id,
@@ -1052,7 +1054,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       macros: estimate.macros,
       confidence: estimate.confidence,
       assumptions: [`Aus ${savedFood.title} mit Faktor x${multiplier} uebernommen.`],
-      loggedAt: now,
+      loggedAt: mealLoggedAt,
       createdAt: now,
       updatedAt: now,
       photo: null,

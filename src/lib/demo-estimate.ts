@@ -76,30 +76,10 @@ function keywordItems(text: string): EstimateItem[] {
   }));
 }
 
-function scaleFromRefinement(answers?: Record<string, string>) {
-  const portion = answers?.portion_size;
-  if (portion === "smaller") {
-    return 0.82;
-  }
-  if (portion === "larger") {
-    return 1.22;
-  }
-
-  const extras = answers?.extras_level;
-  if (extras === "loaded") {
-    return 1.16;
-  }
-  if (extras === "light") {
-    return 0.92;
-  }
-
-  return 1;
-}
-
 export function createDemoEstimate(input: AnalyzeEntryInput): MealEstimate {
   const descriptiveText = [input.manualText, input.userContext].filter(Boolean).join(" ").trim();
   const items = keywordItems(descriptiveText);
-  const multiplier = scaleFromRefinement(input.refinementAnswers);
+  const multiplier = 1;
   const calories = Math.round(items.reduce((sum, item) => sum + item.calories, 0) * multiplier);
   const macros = items.reduce(
     (totals, item) => ({
@@ -154,34 +134,11 @@ export function createDemoEstimate(input: AnalyzeEntryInput): MealEstimate {
       fat: Math.round(macros.fat * multiplier * 10) / 10,
       fiber: Math.round((macros.fiber ?? 0) * multiplier * 10) / 10,
     },
-    confidence: clamp(input.priorEstimate ? 84 : 68, 1, 99),
+    confidence: clamp(68, 1, 99),
     assumptions: [
       "Der Demo-Modus ist aktiv, daher wird die Schätzung lokal auf deinem Gerät erstellt.",
       input.userContext ? "Dein zusätzlicher Kontext wurde für die Schätzung berücksichtigt." : "Es wurde kein zusätzlicher Kontext angegeben.",
     ],
-    refinementQuestions: input.priorEstimate
-      ? []
-      : [
-          {
-            id: "portion_size",
-            label: "Wie groß war die Portion?",
-            helperText: "Das ist oft der schnellste Weg zu einer genaueren Schätzung.",
-            options: [
-              { id: "smaller", label: "Kleiner" },
-              { id: "regular", label: "Normal" },
-              { id: "larger", label: "Größer" },
-            ],
-          },
-          {
-            id: "extras_level",
-            label: "Wie viel Öl, Sauce oder Extras waren dabei?",
-            helperText: null,
-            options: [
-              { id: "light", label: "Wenig" },
-              { id: "regular", label: "Normal" },
-              { id: "loaded", label: "Viel" },
-            ],
-          },
-        ],
+    refinementQuestions: [],
   };
 }

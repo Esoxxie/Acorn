@@ -33,6 +33,7 @@ type DailySummaryCardProps = {
   mealCount: number;
   macroTotals: MacroSnapshot;
   missingProfileFields: string[];
+  title?: string;
 };
 
 function ringMetrics(percentage: number) {
@@ -165,6 +166,7 @@ export function DailySummaryCard({
   mealCount,
   macroTotals,
   missingProfileFields,
+  title = uiCopy.summary.title,
 }: DailySummaryCardProps) {
   const macroTargets = deriveMacroTargets(goalCalories);
   const subtitle = goalCalories
@@ -177,7 +179,7 @@ export function DailySummaryCard({
     <section className="section-card daily-summary-card">
       <div className="daily-summary-card__header">
         <div className="daily-summary-card__titles">
-          <h1>{uiCopy.summary.title}</h1>
+          <h1>{title}</h1>
           <p>{subtitle}</p>
         </div>
         {goalCalories ? (

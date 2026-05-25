@@ -25,7 +25,7 @@ const macroJsonSchema = {
 const geminiResponseJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["mealTitle", "summary", "calories", "confidence", "assumptions", "macros", "items", "refinementQuestions"],
+  required: ["mealTitle", "summary", "calories", "confidence", "assumptions", "macros", "items"],
   properties: {
     mealTitle: { type: "string" },
     summary: { type: "string" },
@@ -50,32 +50,6 @@ const geminiResponseJsonSchema = {
           macros: macroJsonSchema,
           confidence: nullableNumberJsonSchema,
           notes: nullableStringJsonSchema,
-        },
-      },
-    },
-    refinementQuestions: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["id", "label", "helperText", "options"],
-        properties: {
-          id: { type: "string" },
-          label: { type: "string" },
-          helperText: nullableStringJsonSchema,
-          options: {
-            type: "array",
-            items: {
-              type: "object",
-              additionalProperties: false,
-              required: ["id", "label", "detail"],
-              properties: {
-                id: { type: "string" },
-                label: { type: "string" },
-                detail: nullableStringJsonSchema,
-              },
-            },
-          },
         },
       },
     },
@@ -155,7 +129,8 @@ const compatibilityEstimateSchema = z.object({
           .max(4),
       }),
     )
-    .max(3),
+    .max(3)
+    .default([]),
 });
 
 const estimateSchema = z.object({
@@ -411,9 +386,7 @@ const SYSTEM_INSTRUCTION = [
   "confidence ist ein ganzzahliger Wert von 1 bis 99.",
   "Verwende stabile, slugartige ids wie gegrilltes-haehnchen, extra-sauce, portion-gross oder dressing-separat.",
   "assumptions müssen kurz, ehrlich und konkret sein. Nutze ein leeres Array, wenn es keine wichtigen Annahmen gibt.",
-  "Wenn es eine relevante Unsicherheit gibt, die Kalorien oder Makros spürbar verändern würde, erstelle 1 bis 3 refinementQuestions mit jeweils 2 bis 4 gut antippbaren Optionen.",
-  "Wenn es keine relevante Unsicherheit gibt, gib refinementQuestions als leeres Array zurück.",
-  "Wenn dies bereits eine Verfeinerungsanfrage ist, aktualisiere die Schätzung anhand der ausgewählten Antworten und behalte nur solche restlichen refinementQuestions, die noch wichtig sind.",
+  "Erstelle keine Rückfragen oder Verfeinerungsoptionen. Nutzer korrigieren Schätzungen manuell in der App.",
 ].join("\n");
 
 export function buildSystemInstruction() {
@@ -430,17 +403,12 @@ export function buildPrompt(input: AnalyzeEntryInput) {
     ? `Nutzerkontext: ${input.userContext.trim()}`
     : "Nutzerkontext: keiner";
 
-  const refinementBlock =
-    input.priorEstimate && input.refinementAnswers
-      ? `Dies ist eine Verfeinerungsanfrage.\nJSON der vorherigen Schätzung: ${JSON.stringify(input.priorEstimate)}\nAusgewählte Antworten: ${JSON.stringify(input.refinementAnswers)}`
-      : "Dies ist eine erste Schätzanfrage.";
-
   const mealText =
     input.mode === "manual_ai"
       ? `Manuelle Beschreibung: ${input.manualText?.trim() ?? ""}`
       : "Das Foto wurde als eingebettete Bilddaten angehängt.";
 
-  return [modeInstructions, mealText, contextBlock, refinementBlock].join("\n");
+  return [modeInstructions, mealText, contextBlock].join("\n");
 }
 
 export async function runGeminiMealAnalysis(
