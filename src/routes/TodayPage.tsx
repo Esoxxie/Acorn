@@ -179,12 +179,10 @@ export function TodayPage() {
           <article className="stat-card">
             <span>{uiCopy.today.weeklyAverage}</span>
             <strong>{formatCalories(weeklyAverage.calories)}</strong>
-            <p>{weeklyAverage.meals}/Tag</p>
           </article>
           <article className="stat-card">
             <span>{uiCopy.today.monthlyAverage}</span>
             <strong>{formatCalories(monthlyAverage.calories)}</strong>
-            <p>{monthlyAverage.meals}/Tag</p>
           </article>
         </div>
       </section>
@@ -200,12 +198,10 @@ export function TodayPage() {
             <article className="stat-card">
               <span>{uiCopy.today.weeklyAverage}</span>
               <strong>{formatCalories(weeklyAverage.calories)}</strong>
-              <p>{weeklyAverage.meals}/Tag</p>
             </article>
             <article className="stat-card">
               <span>{uiCopy.today.monthlyAverage}</span>
               <strong>{formatCalories(monthlyAverage.calories)}</strong>
-              <p>{monthlyAverage.meals}/Tag</p>
             </article>
           </div>
 
