@@ -128,5 +128,9 @@ export const uiCopy = {
     addItem: "Item hinzufügen",
     removeItem: "Item entfernen",
     manualEditError: "Prüfe Titel, Zutaten und Nährwerte. Mindestens eine Zutat braucht Name, Portion und kcal.",
+    refinePlaceholder: "Zutaten korrigieren (z. B. 'ohne Käse', 'mehr Reis')",
+    refineAction: "Anpassen",
+    refineError: "Bitte gib eine Korrektur ein.",
+    editShort: "Ändern",
   },
 } as const;

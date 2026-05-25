@@ -46,9 +46,8 @@ function AppShell() {
         </Routes>
       </main>
 
-      <button className="floating-log-button" onClick={openLogFlow} type="button">
+      <button className="floating-log-button" onClick={openLogFlow} type="button" aria-label={uiCopy.nav.add}>
         <Plus size={18} />
-        {uiCopy.nav.add}
       </button>
 
       <nav className="bottom-nav">

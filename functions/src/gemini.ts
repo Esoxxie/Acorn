@@ -408,6 +408,33 @@ export function buildPrompt(input: AnalyzeEntryInput) {
       ? `Manuelle Beschreibung: ${input.manualText?.trim() ?? ""}`
       : "Das Foto wurde als eingebettete Bilddaten angehängt.";
 
+  if (input.priorEstimate) {
+    const prior = input.priorEstimate;
+    const priorSummary = [
+      "Hier ist die vorherige Schätzung:",
+      `Gericht: ${prior.mealTitle}`,
+      `Zusammenfassung: ${prior.summary}`,
+      `Kalorien: ${prior.calories} kcal`,
+      `Makros: Protein ${prior.macros.protein}g, Kohlenhydrate ${prior.macros.carbs}g, Fett ${prior.macros.fat}g, Ballaststoffe ${prior.macros.fiber ?? 0}g`,
+      "Einzelne Zutaten:",
+      prior.items
+        .map(
+          (item) =>
+            `- Name: ${item.name}, Portion: ${item.portion}, Kalorien: ${item.calories} kcal, Protein: ${item.macros.protein}g, Kohlenhydrate: ${item.macros.carbs}g, Fett: ${item.macros.fat}g`,
+        )
+        .join("\n"),
+    ].join("\n");
+
+    const refinementInstructions = [
+      "Der Nutzer möchte diese Schätzung anpassen. Nutze den aktuellen Nutzerkontext als Korrektur/Verfeinerungs-Hinweis.",
+      `Korrekturhinweis des Nutzers: "${input.userContext?.trim() ?? ""}"`,
+      "Bitte aktualisiere die vorherige Schätzung basierend auf diesem Korrekturhinweis.",
+      "Ändere oder entferne nur die vom Korrekturhinweis betroffenen Zutaten und passe die Gesamtkalorien und Makros entsprechend an. Behalte alle unberührten Zutaten unverändert bei.",
+    ].join("\n");
+
+    return [modeInstructions, priorSummary, refinementInstructions].join("\n\n");
+  }
+
   return [modeInstructions, mealText, contextBlock].join("\n");
 }
 

@@ -228,6 +228,20 @@ describe("Gemini meal estimate contract", () => {
     expect(prompt).not.toContain("Verfeinerungsanfrage");
   });
 
+  it("builds a user prompt with priorEstimate for refinement", () => {
+    const prompt = buildPrompt({
+      ...baseInput,
+      userContext: "ohne Reis, stattdessen Brokkoli",
+      priorEstimate: canonicalEstimate,
+    });
+
+    expect(prompt).toContain("Hier ist die vorherige Schätzung:");
+    expect(prompt).toContain("Gericht: Hähnchen-Reis-Bowl");
+    expect(prompt).toContain("- Name: Hähnchen, Portion: 150 g");
+    expect(prompt).toContain("Korrekturhinweis des Nutzers: \"ohne Reis, stattdessen Brokkoli\"");
+    expect(prompt).toContain("Bitte aktualisiere die vorherige Schätzung basierend auf diesem Korrekturhinweis.");
+  });
+
   it("passes system instruction to Gemini config", async () => {
     generateContent.mockResolvedValue({
       text: JSON.stringify(canonicalEstimate),

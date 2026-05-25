@@ -77,8 +77,83 @@ function keywordItems(text: string): EstimateItem[] {
 }
 
 export function createDemoEstimate(input: AnalyzeEntryInput): MealEstimate {
-  const descriptiveText = [input.manualText, input.userContext].filter(Boolean).join(" ").trim();
-  const items = keywordItems(descriptiveText);
+  let items: EstimateItem[] = [];
+  const prior = input.priorEstimate;
+
+  if (prior) {
+    items = [...prior.items];
+    const refinementText = (input.userContext ?? "").toLowerCase();
+
+    // Check for removals first
+    for (const [key, food] of Object.entries(foodLibrary)) {
+      const labelLower = food.label.toLowerCase();
+      const hasNegative =
+        refinementText.includes(`ohne ${key}`) ||
+        refinementText.includes(`ohne ${labelLower}`) ||
+        refinementText.includes(`kein ${key}`) ||
+        refinementText.includes(`kein ${labelLower}`) ||
+        refinementText.includes(`keine ${key}`) ||
+        refinementText.includes(`keine ${labelLower}`) ||
+        refinementText.includes(`no ${key}`) ||
+        refinementText.includes(`no ${labelLower}`);
+
+      if (hasNegative) {
+        items = items.filter(
+          (item) => !item.name.toLowerCase().includes(labelLower) && !item.id.toLowerCase().includes(key),
+        );
+      }
+    }
+
+    // Check for additions
+    for (const [key, food] of Object.entries(foodLibrary)) {
+      const labelLower = food.label.toLowerCase();
+      const isNegative =
+        refinementText.includes(`ohne ${key}`) ||
+        refinementText.includes(`ohne ${labelLower}`) ||
+        refinementText.includes(`kein ${key}`) ||
+        refinementText.includes(`kein ${labelLower}`) ||
+        refinementText.includes(`keine ${key}`) ||
+        refinementText.includes(`keine ${labelLower}`) ||
+        refinementText.includes(`no ${key}`) ||
+        refinementText.includes(`no ${labelLower}`);
+
+      if (!isNegative) {
+        const hasPositive =
+          refinementText.includes(`mit ${key}`) ||
+          refinementText.includes(`mit ${labelLower}`) ||
+          refinementText.includes(`add ${key}`) ||
+          refinementText.includes(`add ${labelLower}`) ||
+          refinementText.includes(key) ||
+          refinementText.includes(labelLower);
+
+        if (hasPositive) {
+          const alreadyExists = items.some(
+            (item) => item.name.toLowerCase().includes(labelLower) || item.id.toLowerCase().includes(key),
+          );
+          if (!alreadyExists) {
+            items.push({
+              id: `${key}-${Date.now()}`,
+              name: food.label,
+              portion: food.portion,
+              calories: food.calories,
+              confidence: 70,
+              notes: null,
+              macros: {
+                protein: food.protein,
+                carbs: food.carbs,
+                fat: food.fat,
+                fiber: 2,
+              },
+            });
+          }
+        }
+      }
+    }
+  } else {
+    const descriptiveText = [input.manualText, input.userContext].filter(Boolean).join(" ").trim();
+    items = keywordItems(descriptiveText);
+  }
+
   const multiplier = 1;
   const calories = Math.round(items.reduce((sum, item) => sum + item.calories, 0) * multiplier);
   const macros = items.reduce(
@@ -100,6 +175,7 @@ export function createDemoEstimate(input: AnalyzeEntryInput): MealEstimate {
           return `Foto-Mahlzeit mit ${primaryItems.join(" und ")}`;
         }
 
+        const descriptiveText = [input.manualText, input.userContext].filter(Boolean).join(" ").trim();
         return descriptiveText ? `Foto-Mahlzeit mit ${formatMealTitleText(descriptiveText.split(" ").slice(0, 2).join(" "))}` : "Kamera-Schätzung";
       }
 
@@ -107,6 +183,7 @@ export function createDemoEstimate(input: AnalyzeEntryInput): MealEstimate {
         return primaryItems.join(primaryItems.length > 1 ? " und " : "");
       }
 
+      const descriptiveText = [input.manualText, input.userContext].filter(Boolean).join(" ").trim();
       if (descriptiveText) {
         return formatMealTitleText(descriptiveText.split(",").slice(0, 2).join(" · "));
       }

@@ -1,4 +1,4 @@
-import { Camera, PencilLine, Plus, Star, Trash2 } from "lucide-react";
+import { ArrowLeft, Camera, PencilLine, Plus, Send, Star, Trash2 } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState, type ChangeEvent, type PropsWithChildren } from "react";
 import type { EstimateItem, MealEstimate, MealRecord } from "../../../shared/models";
 import { useAppData, useAuth } from "../../app/contexts";
@@ -180,6 +180,8 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refineText, setRefineText] = useState("");
+  const [refining, setRefining] = useState(false);
   const instantPreviewUrlRef = useRef<string | null>(null);
   const imagePreparationIdRef = useRef(0);
   const imagePreparationPromiseRef = useRef<Promise<PreparedImageAssets> | null>(null);
@@ -223,6 +225,8 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
     setAnalyzing(false);
     setSaving(false);
     setError(null);
+    setRefineText("");
+    setRefining(false);
   }
 
   function openLogFlow() {
@@ -304,6 +308,37 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
       setError(getErrorMessage(caughtError));
     } finally {
       setAnalyzing(false);
+    }
+  }
+
+  async function refineCurrentEstimate() {
+    if (!refineText.trim()) {
+      setError(uiCopy.logFlow.refineError);
+      return;
+    }
+    if (!estimate) {
+      return;
+    }
+
+    setRefining(true);
+    setError(null);
+
+    try {
+      const response = await getEstimate({
+        mode: file ? "photo" : "manual_ai",
+        imageBase64: preparedAssets?.imageBase64,
+        mimeType: preparedAssets?.mimeType,
+        manualText: file ? undefined : entryText.trim(),
+        userContext: refineText.trim(),
+        priorEstimate: estimate,
+      }, appEnv.usingDemoConfig || Boolean(user?.isDemo));
+
+      setEstimate(response.data);
+      setRefineText("");
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError));
+    } finally {
+      setRefining(false);
     }
   }
 
@@ -513,7 +548,13 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
         ) : null}
 
         <section className="estimate-card estimate-card--review">
-          <div className="estimate-card__header estimate-card__header--review">
+          <div
+            className="estimate-card__header estimate-card__header--review estimate-item--clickable"
+            onClick={() => {
+              setEditDraft(estimateToEditDraft(estimate));
+              setStep("manualEdit");
+            }}
+          >
             <div className="estimate-card__title">
               <h3>{estimate.mealTitle}</h3>
               <p>{estimate.summary}</p>
@@ -541,7 +582,14 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
 
           <div className="estimate-card__items">
             {estimate.items.map((item) => (
-              <div className="estimate-item" key={item.id}>
+              <div
+                className="estimate-item estimate-item--clickable"
+                key={item.id}
+                onClick={() => {
+                  setEditDraft(estimateToEditDraft(estimate));
+                  setStep("manualEdit");
+                }}
+              >
                 <div>
                   <strong>{item.name}</strong>
                   <span>{item.portion}</span>
@@ -552,12 +600,45 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
           </div>
         </section>
 
+        <div className="refine-field">
+          <textarea
+            disabled={refining || saving}
+            onChange={(event) => setRefineText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                void refineCurrentEstimate();
+              }
+            }}
+            placeholder={uiCopy.logFlow.refinePlaceholder}
+            rows={1}
+            value={refineText}
+          />
+          <button
+            className="refine-submit-btn"
+            disabled={refining || saving || !refineText.trim()}
+            onClick={() => void refineCurrentEstimate()}
+            type="button"
+          >
+            {refining ? (
+              uiCopy.logFlow.updating
+            ) : (
+              <>
+                <Send size={14} />
+                <span>{uiCopy.logFlow.refineAction}</span>
+              </>
+            )}
+          </button>
+        </div>
+
         <div className="sheet__actions">
-          <button className="secondary-button" onClick={() => setStep("composer")} type="button">
-            {uiCopy.logFlow.back}
+          <button className="secondary-button" disabled={refining || saving} onClick={() => setStep("composer")} type="button">
+            <ArrowLeft size={18} />
+            <span>{uiCopy.logFlow.back}</span>
           </button>
           <button
             className="secondary-button"
+            disabled={refining || saving}
             onClick={() => {
               setEditDraft(estimateToEditDraft(estimate));
               setStep("manualEdit");
@@ -565,11 +646,11 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
             type="button"
           >
             <PencilLine size={18} />
-            {uiCopy.mealCard.edit}
+            <span>{uiCopy.logFlow.editShort}</span>
           </button>
-          <button className="primary-button" disabled={saving} onClick={() => void saveCurrentMeal()} type="button">
+          <button className="primary-button" disabled={refining || saving} onClick={() => void saveCurrentMeal()} type="button">
             <Star size={18} />
-            {saving ? uiCopy.logFlow.saving : uiCopy.logFlow.save}
+            <span>{saving ? uiCopy.logFlow.saving : uiCopy.logFlow.save}</span>
           </button>
         </div>
       </div>

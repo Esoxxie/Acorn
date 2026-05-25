@@ -27,16 +27,36 @@ function getMealsForDay(meals: MealRecord[], dayKey: string) {
   return meals.filter((meal) => getLocalDayKey(meal.loggedAt) === dayKey);
 }
 
-function getDailyAverage(meals: MealRecord[], selectedDayKey: string, days: number) {
-  const dayKeys = new Set(
-    Array.from({ length: days }, (_, index) => addDaysToLocalDayKey(selectedDayKey, -index)),
-  );
-  const mealsInRange = meals.filter((meal) => dayKeys.has(getLocalDayKey(meal.loggedAt)));
-  const calories = mealsInRange.reduce((sum, meal) => sum + meal.calories, 0);
+export function getDailyAverage(meals: MealRecord[], selectedDayKey: string, daysLimit: number) {
+  const mealsByDay = new Map<string, MealRecord[]>();
+  for (const meal of meals) {
+    const dayKey = getLocalDayKey(meal.loggedAt);
+    if (dayKey <= selectedDayKey) {
+      const dayMeals = mealsByDay.get(dayKey) || [];
+      dayMeals.push(meal);
+      mealsByDay.set(dayKey, dayMeals);
+    }
+  }
 
+  const sortedActiveDays = Array.from(mealsByDay.keys()).sort().reverse();
+  const activeDaysInRange = sortedActiveDays.slice(0, daysLimit);
+
+  if (activeDaysInRange.length === 0) {
+    return { calories: 0, meals: 0 };
+  }
+
+  let totalCalories = 0;
+  let totalMeals = 0;
+  for (const dayKey of activeDaysInRange) {
+    const dayMeals = mealsByDay.get(dayKey) || [];
+    totalCalories += dayMeals.reduce((sum, m) => sum + m.calories, 0);
+    totalMeals += dayMeals.length;
+  }
+
+  const denominator = activeDaysInRange.length;
   return {
-    calories: Math.round(calories / days),
-    meals: Math.round((mealsInRange.length / days) * 10) / 10,
+    calories: Math.round(totalCalories / denominator),
+    meals: Math.round((totalMeals / denominator) * 10) / 10,
   };
 }
 
