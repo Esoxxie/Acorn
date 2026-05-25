@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Camera, Plus, Library, UserRound } from "lucide-react";
+import { Home, Plus, Library, UserRound } from "lucide-react";
 import { BrowserRouter, NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { AppDataProvider, AuthProvider, useAppData, useAuth } from "./contexts";
 import { LogFlowProvider, useLogFlow } from "../features/log/LogFlow";
@@ -29,10 +29,6 @@ function AppShell() {
     <div className="shell">
       <header className="topbar">
         <AcornLogo compact />
-        <button className="pill-button topbar__add-button" onClick={openLogFlow} type="button">
-          <Plus size={16} />
-          {uiCopy.nav.add}
-        </button>
       </header>
 
       {syncError ? <div className="inline-error">{syncError}</div> : null}
@@ -46,15 +42,16 @@ function AppShell() {
         </Routes>
       </main>
 
-      <button className="floating-log-button" onClick={openLogFlow} type="button" aria-label={uiCopy.nav.add}>
-        <Plus size={18} />
-      </button>
-
       <nav className="bottom-nav">
         <NavLink className={({ isActive }) => `bottom-nav__item ${isActive ? "is-active" : ""}`} end to="/">
-          <Camera size={18} />
+          <Home size={18} />
           <span>{uiCopy.nav.today}</span>
         </NavLink>
+
+        <button className="bottom-nav__add-button" onClick={openLogFlow} type="button" aria-label={uiCopy.nav.add}>
+          <Plus size={20} strokeWidth={2.5} />
+        </button>
+
         <NavLink className={({ isActive }) => `bottom-nav__item ${isActive ? "is-active" : ""}`} to="/library">
           <Library size={18} />
           <span>{uiCopy.nav.library}</span>
