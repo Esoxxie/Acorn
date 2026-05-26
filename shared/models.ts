@@ -79,6 +79,11 @@ export type UserProfile = {
   weightKg?: number | null;
   activityLevel?: ActivityLevel | null;
   dailySpendKcal?: number | null;
+  goalMode?: "calculated" | "manual" | null;
+  manualCalorieGoal?: number | null;
+  manualProteinGoal?: number | null;
+  manualCarbGoal?: number | null;
+  manualFatGoal?: number | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };

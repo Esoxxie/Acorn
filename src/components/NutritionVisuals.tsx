@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, useRef } from "react";
 import { Target, Leaf, Droplet, Wheat } from "lucide-react";
-import type { MacroSnapshot } from "../../shared/models";
+import type { MacroSnapshot, UserProfile } from "../../shared/models";
 import { uiCopy } from "../lib/copy";
 import { formatCalories } from "../lib/format";
 import {
@@ -360,11 +360,13 @@ export function DailySummaryCard({
 export function MacroSummaryCard({
   macroTotals,
   goalCalories,
+  profile,
 }: {
   macroTotals: MacroSnapshot;
   goalCalories: number | null;
+  profile?: UserProfile | null;
 }) {
-  const macroTargets = deriveMacroTargets(goalCalories);
+  const macroTargets = deriveMacroTargets(goalCalories, profile);
   return (
     <section className="section-card macro-summary-card">
       <MacroProgressList macroTargets={macroTargets} macroTotals={macroTotals} />

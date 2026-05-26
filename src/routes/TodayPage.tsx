@@ -1,10 +1,10 @@
-import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Plus, TrendingDown, TrendingUp } from "lucide-react";
 import { useMemo, useState, type CSSProperties } from "react";
 import { useAppData } from "../app/contexts";
 import { BottomSheet } from "../components/BottomSheet";
 import { MealCard } from "../components/MealCard";
 import { DailySummaryCard, MacroSummaryCard } from "../components/NutritionVisuals";
-import type { MacroSnapshot, MealRecord } from "../../shared/models";
+import type { MacroSnapshot, MealEstimate, MealRecord } from "../../shared/models";
 import { useLogFlow } from "../features/log/LogFlow";
 import { uiCopy } from "../lib/copy";
 import { formatCalories, formatDateLabel } from "../lib/format";
@@ -78,12 +78,30 @@ function formatChartDayLabel(dayKey: string) {
   return `${Number(day)}.${Number(month)}.`;
 }
 
+function AverageDelta({ average, goal }: { average: number; goal: number }) {
+  if (!average) return null;
+  const delta = average - goal;
+  const absVal = Math.abs(Math.round(delta));
+  const isOver = delta > 0;
+  const Icon = isOver ? TrendingUp : TrendingDown;
+  const color = isOver ? "var(--nutrition-fat)" : "var(--nutrition-protein)";
+  const sign = isOver ? "+" : "−";
+
+  return (
+    <span className="stat-card__delta" style={{ color }}>
+      <Icon aria-hidden="true" size={10} />
+      {sign}{absVal} kcal
+    </span>
+  );
+}
+
 export function TodayPage() {
   const {
     profile,
     meals,
     savedFoods,
     quickLogSavedFood,
+    saveMeal,
     toggleMealFavorite,
     deleteMeal,
     updateMealServings,
@@ -99,15 +117,50 @@ export function TodayPage() {
   const monthlyAverage = useMemo(() => getDailyAverage(meals, selectedDayKey, 30), [meals, selectedDayKey]);
   const chartSeries = useMemo(() => getDailySeries(meals, selectedDayKey, 30), [meals, selectedDayKey]);
   const chartMaxCalories = Math.max(1, ...chartSeries.map((day) => day.calories));
-  const dailySpend = profile?.dailySpendKcal ?? null;
+  const dailySpend = profile?.goalMode === "manual"
+    ? (profile.manualCalorieGoal ?? profile.dailySpendKcal ?? null)
+    : (profile?.dailySpendKcal ?? null);
   const selectedDateLabel = formatDateLabel(createTimestampForLocalDay(selectedDayKey));
-  const missingProfileFields = [
-    !profile?.age ? "Alter" : null,
-    !profile?.sex ? "Geschlecht" : null,
-    !profile?.heightCm ? "Größe" : null,
-    !profile?.weightKg ? "Gewicht" : null,
-    !profile?.activityLevel ? "Aktivität" : null,
-  ].filter(Boolean) as string[];
+  const missingProfileFields = profile?.goalMode === "manual"
+    ? []
+    : [
+        !profile?.age ? "Alter" : null,
+        !profile?.sex ? "Geschlecht" : null,
+        !profile?.heightCm ? "Größe" : null,
+        !profile?.weightKg ? "Gewicht" : null,
+        !profile?.activityLevel ? "Aktivität" : null,
+      ].filter(Boolean) as string[];
+
+  function mealToEstimate(meal: MealRecord): MealEstimate {
+    return {
+      mealTitle: meal.mealTitle,
+      summary: meal.summary,
+      items: meal.items,
+      calories: meal.calories,
+      macros: meal.macros,
+      confidence: meal.confidence,
+      assumptions: meal.assumptions,
+      refinementQuestions: [],
+    };
+  }
+
+  async function relogMeal(meal: MealRecord) {
+    const savedFood = meal.savedFoodId
+      ? savedFoods.find((currentSavedFood) => currentSavedFood.id === meal.savedFoodId)
+      : null;
+
+    if (savedFood) {
+      await quickLogSavedFood(savedFood, 1, createTimestampForLocalDay(selectedDayKey));
+      return;
+    }
+
+    await saveMeal({
+      source: "saved_food",
+      estimate: mealToEstimate(meal),
+      userContext: meal.userContext,
+      transcript: meal.transcript,
+    });
+  }
 
   async function addSavedFoodToSelectedDay(savedFoodId: string) {
     const savedFood = savedFoods.find((currentSavedFood) => currentSavedFood.id === savedFoodId);
@@ -160,6 +213,7 @@ export function TodayPage() {
         <MacroSummaryCard
           macroTotals={selectedMacros}
           goalCalories={dailySpend}
+          profile={profile}
         />
 
         <section
@@ -183,10 +237,16 @@ export function TodayPage() {
             <article className="stat-card">
               <span>{uiCopy.today.weeklyAverage}</span>
               <strong>{formatCalories(weeklyAverage.calories)}</strong>
+              {dailySpend ? (
+                <AverageDelta average={weeklyAverage.calories} goal={dailySpend} />
+              ) : null}
             </article>
             <article className="stat-card">
               <span>{uiCopy.today.monthlyAverage}</span>
               <strong>{formatCalories(monthlyAverage.calories)}</strong>
+              {dailySpend ? (
+                <AverageDelta average={monthlyAverage.calories} goal={dailySpend} />
+              ) : null}
             </article>
           </div>
         </section>
@@ -202,10 +262,16 @@ export function TodayPage() {
               <article className="stat-card">
                 <span>{uiCopy.today.weeklyAverage}</span>
                 <strong>{formatCalories(weeklyAverage.calories)}</strong>
+                {dailySpend ? (
+                  <AverageDelta average={weeklyAverage.calories} goal={dailySpend} />
+                ) : null}
               </article>
               <article className="stat-card">
                 <span>{uiCopy.today.monthlyAverage}</span>
                 <strong>{formatCalories(monthlyAverage.calories)}</strong>
+                {dailySpend ? (
+                  <AverageDelta average={monthlyAverage.calories} goal={dailySpend} />
+                ) : null}
               </article>
             </div>
 
@@ -283,6 +349,7 @@ export function TodayPage() {
                   onDelete={deleteMeal}
                   onEdit={openEditMeal}
                   onFavorite={toggleMealFavorite}
+                  onRelog={relogMeal}
                   onToggleExpand={(currentMeal) =>
                     setExpandedMealId((activeMealId) => (activeMealId === currentMeal.id ? null : currentMeal.id))
                   }

@@ -71,6 +71,7 @@ type SaveMealInput = {
   userContext?: string | null;
   transcript?: string | null;
   favorite?: boolean;
+  loggedAt?: string;
 };
 
 type MealUpdateInput = Partial<Omit<MealRecord, "id" | "servings" | "baseSnapshot">> & {
@@ -805,7 +806,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         macros: input.estimate.macros,
         confidence: input.estimate.confidence,
         assumptions: input.estimate.assumptions,
-        loggedAt: now,
+        loggedAt: input.loggedAt ?? now,
         createdAt: now,
         updatedAt: now,
         photo: dataUrl ? { storagePath: dataUrl, thumbPath: dataUrl } : null,
@@ -860,7 +861,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       macros: input.estimate.macros,
       confidence: input.estimate.confidence,
       assumptions: input.estimate.assumptions,
-      loggedAt: now,
+      loggedAt: input.loggedAt ?? now,
       createdAt: now,
       updatedAt: now,
       photo: null,

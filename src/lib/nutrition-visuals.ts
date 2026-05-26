@@ -1,4 +1,4 @@
-import type { MacroSnapshot } from "../../shared/models";
+import type { MacroSnapshot, UserProfile } from "../../shared/models";
 
 export type MacroKey = "protein" | "fat" | "carbs";
 
@@ -54,9 +54,20 @@ export function getCalorieProgress(currentCalories: number, goalCalories?: numbe
   };
 }
 
-export function deriveMacroTargets(dailyCalories?: number | null): MacroGoalSnapshot | null {
+export function deriveMacroTargets(
+  dailyCalories?: number | null,
+  profile?: UserProfile | null,
+): MacroGoalSnapshot | null {
   if (!dailyCalories || dailyCalories <= 0) {
     return null;
+  }
+
+  if (profile?.goalMode === "manual") {
+    return {
+      protein: profile.manualProteinGoal ?? (dailyCalories * 0.25) / 4,
+      fat: profile.manualFatGoal ?? (dailyCalories * 0.25) / 9,
+      carbs: profile.manualCarbGoal ?? (dailyCalories * 0.5) / 4,
+    };
   }
 
   return {

@@ -1,4 +1,4 @@
-import { ArrowLeft, Camera, PencilLine, Plus, Send, Star, Trash2 } from "lucide-react";
+import { ArrowLeft, Camera, ChevronDown, ChevronRight, PencilLine, Plus, Send, Star, Trash2 } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState, type ChangeEvent, type PropsWithChildren } from "react";
 import type { EstimateItem, MealEstimate, MealRecord } from "../../../shared/models";
 import { useAppData, useAuth } from "../../app/contexts";
@@ -9,7 +9,7 @@ import { appEnv } from "../../lib/env";
 import { getCallableErrorMessage } from "../../lib/callable-error";
 import { analyzeEntry } from "../../lib/firebase";
 import { createDemoEstimate } from "../../lib/demo-estimate";
-import { formatCalories, formatMacro } from "../../lib/format";
+import { formatCalories, formatMacro, toLocalDatetimeString, parseLocalDatetime } from "../../lib/format";
 import { prepareImageAssets, releasePreparedImageAssets, type PreparedImageAssets } from "../../lib/image";
 import { createMealSnapshot, createMealSnapshotFromItems } from "../../../shared/calorie";
 import { resolveStorageUrl } from "../../lib/storage";
@@ -32,6 +32,7 @@ type EditDraft = {
   mealTitle: string;
   summary: string;
   items: EditableItem[];
+  loggedAt: string;
 };
 
 type LogFlowContextValue = {
@@ -97,11 +98,12 @@ function itemToEditableItem(item: EstimateItem): EditableItem {
   };
 }
 
-function estimateToEditDraft(nextEstimate: MealEstimate): EditDraft {
+function estimateToEditDraft(nextEstimate: MealEstimate, loggedAt?: string): EditDraft {
   return {
     mealTitle: nextEstimate.mealTitle,
     summary: nextEstimate.summary,
     items: nextEstimate.items.length ? nextEstimate.items.map(itemToEditableItem) : [createBlankEditableItem()],
+    loggedAt: loggedAt ?? new Date().toISOString(),
   };
 }
 
@@ -177,6 +179,7 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
   const [entryText, setEntryText] = useState("");
   const [estimate, setEstimate] = useState<MealEstimate | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -222,6 +225,7 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
     setEntryText("");
     setEstimate(null);
     setEditDraft(null);
+    setExpandedItems({});
     setAnalyzing(false);
     setSaving(false);
     setError(null);
@@ -234,17 +238,27 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
     setOpen(true);
   }
 
+  function enterManualEdit(draft: EditDraft) {
+    setEditDraft(draft);
+    const initialExpanded: Record<string, boolean> = {};
+    if (draft.items.length === 1) {
+      initialExpanded[draft.items[0].id] = true;
+    }
+    setExpandedItems(initialExpanded);
+    setStep("manualEdit");
+  }
+
   function openEditMeal(meal: MealRecord) {
     resetState();
     setEditingMeal(meal);
     setEntryText(meal.transcript ?? meal.userContext ?? meal.summary ?? meal.mealTitle);
     setEstimate(mealToEstimate(meal));
-    setEditDraft({
+    enterManualEdit({
       mealTitle: meal.mealTitle,
       summary: meal.summary,
       items: meal.items.length ? meal.items.map(itemToEditableItem) : [createBlankEditableItem()],
+      loggedAt: meal.loggedAt,
     });
-    setStep("manualEdit");
     setOpen(true);
   }
 
@@ -404,6 +418,7 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
           summary: editDraft.summary.trim(),
           transcript: entryText.trim() || null,
           baseSnapshot,
+          loggedAt: editDraft.loggedAt,
         });
       } else {
         await saveMeal({
@@ -421,6 +436,7 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
           photoAssets: file ? preparedAssets : undefined,
           userContext: file ? entryText.trim() || null : null,
           transcript: entryText.trim() || null,
+          loggedAt: editDraft.loggedAt,
         });
       }
       closeLogFlow();
@@ -482,8 +498,24 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
 
     return (
       <div className="stack">
-        <div className="photo-picker">
-          {previewUrl ? (
+        <div className={`photo-picker${analyzing ? " photo-picker--analyzing" : ""}`}>
+          {analyzing ? (
+            <div className="photo-picker__skeleton" aria-label="Analysiere…">
+              {previewUrl ? (
+                <img
+                  alt={uiCopy.logFlow.mealPreview}
+                  className="photo-picker__image photo-picker__image--dimmed"
+                  src={previewUrl}
+                />
+              ) : (
+                <div className="photo-picker__placeholder" />
+              )}
+              <div className="photo-picker__scan-overlay" aria-hidden="true">
+                <div className="photo-picker__scan-line" />
+                <span className="photo-picker__scan-label">Analysiere…</span>
+              </div>
+            </div>
+          ) : previewUrl ? (
             <img alt={uiCopy.logFlow.mealPreview} className="photo-picker__image" src={previewUrl} />
           ) : (
             <div className="photo-picker__placeholder">
@@ -551,8 +583,7 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
           <div
             className="estimate-card__header estimate-card__header--review estimate-item--clickable"
             onClick={() => {
-              setEditDraft(estimateToEditDraft(estimate));
-              setStep("manualEdit");
+              enterManualEdit(estimateToEditDraft(estimate, editingMeal?.loggedAt));
             }}
           >
             <div className="estimate-card__title">
@@ -586,8 +617,7 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
                 className="estimate-item estimate-item--clickable"
                 key={item.id}
                 onClick={() => {
-                  setEditDraft(estimateToEditDraft(estimate));
-                  setStep("manualEdit");
+                  enterManualEdit(estimateToEditDraft(estimate, editingMeal?.loggedAt));
                 }}
               >
                 <div>
@@ -640,8 +670,7 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
             className="secondary-button"
             disabled={refining || saving}
             onClick={() => {
-              setEditDraft(estimateToEditDraft(estimate));
-              setStep("manualEdit");
+              enterManualEdit(estimateToEditDraft(estimate, editingMeal?.loggedAt));
             }}
             type="button"
           >
@@ -666,6 +695,13 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
           }
         : current,
     );
+  }
+
+  function toggleItemExpanded(itemId: string) {
+    setExpandedItems((current) => ({
+      ...current,
+      [itemId]: !current[itemId],
+    }));
   }
 
   function renderManualEditStep() {
@@ -699,6 +735,20 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
                 value={editDraft.summary}
               />
             </label>
+            <label>
+              <span>{uiCopy.logFlow.mealDate}</span>
+              <input
+                type="datetime-local"
+                onChange={(event) => {
+                  const val = event.target.value;
+                  if (val) {
+                    const iso = parseLocalDatetime(val);
+                    setEditDraft((current) => (current ? { ...current, loggedAt: iso } : current));
+                  }
+                }}
+                value={toLocalDatetimeString(editDraft.loggedAt)}
+              />
+            </label>
           </div>
         </section>
 
@@ -717,85 +767,114 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
         ) : null}
 
         <div className="manual-item-list">
-          {editDraft.items.map((item, index) => (
-            <section className="estimate-card manual-item-card" key={item.id}>
-              <div className="manual-item-card__header">
-                <h3>{`#${index + 1}`}</h3>
-                <button
-                  aria-label={uiCopy.logFlow.removeItem}
-                  className="icon-button"
-                  disabled={editDraft.items.length <= 1}
-                  onClick={() =>
-                    setEditDraft((current) =>
-                      current
-                        ? {
-                            ...current,
-                            items: current.items.filter((currentItem) => currentItem.id !== item.id),
-                          }
-                        : current,
-                    )
-                  }
-                  type="button"
+          {editDraft.items.map((item, index) => {
+            const isExpanded = Boolean(expandedItems[item.id]);
+            return (
+              <section className="estimate-card manual-item-card" key={item.id}>
+                <div
+                  className="manual-item-card__header manual-item-card__header--collapsible"
+                  onClick={() => toggleItemExpanded(item.id)}
                 >
-                  <Trash2 size={16} />
-                </button>
-              </div>
+                  <div className="manual-item-card__title-row">
+                    {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                    <span className="manual-item-card__index">{`#${index + 1}`}</span>
+                    <strong className="manual-item-card__name">
+                      {item.name.trim() || uiCopy.logFlow.itemName}
+                    </strong>
+                    {!isExpanded && item.portion && (
+                      <span className="manual-item-card__portion-badge">{item.portion}</span>
+                    )}
+                  </div>
+                  
+                  <div className="manual-item-card__right-row">
+                    {!isExpanded && item.calories && (
+                      <span className="manual-item-card__calories-badge">
+                        {item.calories} kcal
+                      </span>
+                    )}
+                    <button
+                      aria-label={uiCopy.logFlow.removeItem}
+                      className="icon-button manual-item-card__delete"
+                      disabled={editDraft.items.length <= 1}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setEditDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                items: current.items.filter((currentItem) => currentItem.id !== item.id),
+                              }
+                            : current,
+                        );
+                      }}
+                      type="button"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
 
-              <div className="manual-item-grid">
-                <label className="manual-item-grid__wide">
-                  <span>{uiCopy.logFlow.itemName}</span>
-                  <input onChange={(event) => updateEditableItem(item.id, { name: event.target.value })} value={item.name} />
-                </label>
-                <label className="manual-item-grid__wide">
-                  <span>{uiCopy.logFlow.itemPortion}</span>
-                  <input
-                    onChange={(event) => updateEditableItem(item.id, { portion: event.target.value })}
-                    value={item.portion}
-                  />
-                </label>
-                <label>
-                  <span>{uiCopy.logFlow.itemCalories}</span>
-                  <input
-                    inputMode="decimal"
-                    onChange={(event) => updateEditableItem(item.id, { calories: event.target.value })}
-                    value={item.calories}
-                  />
-                </label>
-                <label>
-                  <span>{uiCopy.logFlow.itemProtein}</span>
-                  <input
-                    inputMode="decimal"
-                    onChange={(event) => updateEditableItem(item.id, { protein: event.target.value })}
-                    value={item.protein}
-                  />
-                </label>
-                <label>
-                  <span>{uiCopy.logFlow.itemCarbs}</span>
-                  <input
-                    inputMode="decimal"
-                    onChange={(event) => updateEditableItem(item.id, { carbs: event.target.value })}
-                    value={item.carbs}
-                  />
-                </label>
-                <label>
-                  <span>{uiCopy.logFlow.itemFat}</span>
-                  <input
-                    inputMode="decimal"
-                    onChange={(event) => updateEditableItem(item.id, { fat: event.target.value })}
-                    value={item.fat}
-                  />
-                </label>
-                <label>
-                  <span>{uiCopy.logFlow.itemFiber}</span>
-                  <input
-                    inputMode="decimal"
-                    onChange={(event) => updateEditableItem(item.id, { fiber: event.target.value })}
-                    value={item.fiber}
-                  />
-                </label>
-              </div>
-            </section>
-          ))}
+                {isExpanded && (
+                  <div className="manual-item-grid" style={{ marginTop: "10px" }}>
+                    <label className="manual-item-grid__wide">
+                      <span>{uiCopy.logFlow.itemName}</span>
+                      <input
+                        onChange={(event) => updateEditableItem(item.id, { name: event.target.value })}
+                        value={item.name}
+                      />
+                    </label>
+                    <label className="manual-item-grid__wide">
+                      <span>{uiCopy.logFlow.itemPortion}</span>
+                      <input
+                        onChange={(event) => updateEditableItem(item.id, { portion: event.target.value })}
+                        value={item.portion}
+                      />
+                    </label>
+                    <label>
+                      <span>{uiCopy.logFlow.itemCalories}</span>
+                      <input
+                        inputMode="decimal"
+                        onChange={(event) => updateEditableItem(item.id, { calories: event.target.value })}
+                        value={item.calories}
+                      />
+                    </label>
+                    <label>
+                      <span>{uiCopy.logFlow.itemProtein}</span>
+                      <input
+                        inputMode="decimal"
+                        onChange={(event) => updateEditableItem(item.id, { protein: event.target.value })}
+                        value={item.protein}
+                      />
+                    </label>
+                    <label>
+                      <span>{uiCopy.logFlow.itemCarbs}</span>
+                      <input
+                        inputMode="decimal"
+                        onChange={(event) => updateEditableItem(item.id, { carbs: event.target.value })}
+                        value={item.carbs}
+                      />
+                    </label>
+                    <label>
+                      <span>{uiCopy.logFlow.itemFat}</span>
+                      <input
+                        inputMode="decimal"
+                        onChange={(event) => updateEditableItem(item.id, { fat: event.target.value })}
+                        value={item.fat}
+                      />
+                    </label>
+                    <label>
+                      <span>{uiCopy.logFlow.itemFiber}</span>
+                      <input
+                        inputMode="decimal"
+                        onChange={(event) => updateEditableItem(item.id, { fiber: event.target.value })}
+                        value={item.fiber}
+                      />
+                    </label>
+                  </div>
+                )}
+              </section>
+            );
+          })}
         </div>
 
         <div className="sheet__actions">
@@ -806,11 +885,16 @@ export function LogFlowProvider({ children }: PropsWithChildren) {
           ) : null}
           <button
             className="secondary-button"
-            onClick={() =>
+            onClick={() => {
+              const newItem = createBlankEditableItem();
               setEditDraft((current) =>
-                current ? { ...current, items: [...current.items, createBlankEditableItem()] } : current,
-              )
-            }
+                current ? { ...current, items: [...current.items, newItem] } : current,
+              );
+              setExpandedItems((current) => ({
+                ...current,
+                [newItem.id]: true,
+              }));
+            }}
             type="button"
           >
             <Plus size={18} />

@@ -121,6 +121,7 @@ export const uiCopy = {
     mealPreview: "Vorschau der Mahlzeit",
     mealTitle: "Name",
     mealSummary: "Notiz",
+    mealDate: "Datum & Uhrzeit",
     itemName: "Item",
     itemPortion: "Portion",
     itemCalories: "kcal",
