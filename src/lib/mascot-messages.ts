@@ -11,6 +11,8 @@ interface RawMessage {
   prefix?: string;
   suffix?: string;
   fullText?: string;
+  /** If true, boldText will show currentCalories instead of remaining */
+  useCurrentCal?: boolean;
 }
 
 const NO_GOAL_MESSAGES: RawMessage[] = [
@@ -33,6 +35,22 @@ const ZERO_CAL_MESSAGES: RawMessage[] = [
     header: "Bereit zum Flitzen?",
     fullText: "Zeit, die Pfoten zu strecken und das erste Essen einzutragen!",
   },
+  {
+    header: "Frischer Start!",
+    fullText: "Ein neuer Tag, ein leerer Zähler – das ist die beste Ausgangslage!",
+  },
+  {
+    header: "Leere Leinwand!",
+    fullText: "Der Tag ist noch komplett offen. Mal sehen, was wir draus machen!",
+  },
+  {
+    header: "Guten Hunger!",
+    fullText: "Noch keine Eicheln, dafür jede Menge Möglichkeiten. Leg einfach los!",
+  },
+  {
+    header: "Die Jagd beginnt!",
+    fullText: "Heute ist alles möglich. Trag das erste Essen ein und ich freu mich mit!",
+  },
 ];
 
 const LOW_CAL_MESSAGES: RawMessage[] = [
@@ -45,11 +63,34 @@ const LOW_CAL_MESSAGES: RawMessage[] = [
     header: "Guter Start!",
     prefix: "Schon ",
     suffix: " gesammelt. Der Vorrat wächst!",
+    useCurrentCal: true,
   },
   {
     header: "Fleißig am Sammeln!",
     prefix: "Schritt für Schritt. Noch ",
     suffix: " übrig für heute.",
+  },
+  {
+    header: "Erste Beute!",
+    prefix: "Noch ",
+    suffix: " bis zum Ziel – super eingestiegen!",
+  },
+  {
+    header: "Schon was gesichert!",
+    prefix: "",
+    suffix: " eingesammelt und der Tag ist noch lang!",
+    useCurrentCal: true,
+  },
+  {
+    header: "Klein, aber fein!",
+    prefix: "Noch ",
+    suffix: " offen – du hast heute noch viel Spielraum!",
+  },
+  {
+    header: "Auf in den Wald!",
+    prefix: "Erst ",
+    suffix: " – da ist noch ordentlich Platz für leckere Sachen!",
+    useCurrentCal: true,
   },
 ];
 
@@ -64,6 +105,11 @@ const MID_CAL_MESSAGES: RawMessage[] = [
     prefix: "Dein Tagesziel rückt näher. Noch ",
     suffix: " zu sammeln.",
   },
+  {
+    header: "Mitten im Schwung!",
+    prefix: "Noch ",
+    suffix: " – weiter, du bist super unterwegs!",
+  },
 ];
 
 const NEAR_CAL_MESSAGES: RawMessage[] = [
@@ -77,6 +123,21 @@ const NEAR_CAL_MESSAGES: RawMessage[] = [
     prefix: "Such dir eine besonders feine Nuss aus. Noch ",
     suffix: " bis zum Ziel.",
   },
+  {
+    header: "Letzte Nuss!",
+    prefix: "Noch ",
+    suffix: " – dann ist der Sack voll!",
+  },
+  {
+    header: "Endspurt!",
+    prefix: "Noch ",
+    suffix: " – ich feuere dich an!",
+  },
+  {
+    header: "Zielgerade!",
+    prefix: "Noch ",
+    suffix: " und du bist am Tagesziel für heute.",
+  },
 ];
 
 const TARGET_MET_MESSAGES: RawMessage[] = [
@@ -87,6 +148,22 @@ const TARGET_MET_MESSAGES: RawMessage[] = [
   {
     header: "Volltreffer!",
     fullText: "Nussvorrat perfekt ausbalanciert. Besser geht's nicht!",
+  },
+  {
+    header: "Bullseye! 🎯",
+    fullText: "Tagesziel getroffen – das ist die Meisterklasse!",
+  },
+  {
+    header: "Perfekt gelandet!",
+    fullText: "Nicht mehr, nicht weniger. Genau richtig für heute!",
+  },
+  {
+    header: "Sauber!",
+    fullText: "Tagesziel erfüllt. Abends entspannt zurücklehnen – verdient!",
+  },
+  {
+    header: "Ich bin begeistert!",
+    fullText: "Du bist genau im Ziel. Komm morgen wieder, das machen wir nochmal!",
   },
 ];
 
@@ -101,6 +178,21 @@ const OVER_CAL_MESSAGES: RawMessage[] = [
     prefix: "Ein paar Extra-Nüsse schaden nie. Genau ",
     suffix: " überm Plan.",
   },
+  {
+    header: "Kleines Bonus-Level!",
+    prefix: "Nur ",
+    suffix: " über dem Plan – das ist doch kein Problem!",
+  },
+  {
+    header: "Ein bisschen extra!",
+    prefix: "",
+    suffix: " mehr als geplant – das gehört dazu!",
+  },
+  {
+    header: "Drüber, aber happy!",
+    prefix: "Gerade mal ",
+    suffix: " zu viel – morgen einfach weitermachen!",
+  },
 ];
 
 const HIGH_OVER_CAL_MESSAGES: RawMessage[] = [
@@ -112,6 +204,18 @@ const HIGH_OVER_CAL_MESSAGES: RawMessage[] = [
   {
     header: "Gönnung pur!",
     fullText: "Manchmal braucht man extra Eicheln. Morgen sammeln wir ganz entspannt weiter!",
+  },
+  {
+    header: "Satte Ernte!",
+    fullText: "Ordentlich was gesammelt heute! Morgen fangen wir frisch an – ich freu mich drauf!",
+  },
+  {
+    header: "Großer Tag!",
+    fullText: "Manchmal braucht man einfach mehr Eicheln. Ich urteile nicht, ich zähle nur!",
+  },
+  {
+    header: "Geht auch mal!",
+    fullText: "Heute war's ein bisschen mehr – und das ist völlig okay. Ich bin trotzdem stolz auf dich!",
   },
 ];
 
@@ -135,11 +239,9 @@ export function getMascotMessage(
   } else if (percent < 40) {
     rawList = LOW_CAL_MESSAGES;
     const raw = rawList[indexSeed % rawList.length];
-    if (raw.header === "Guter Start!") {
-      boldVal = `${Math.round(currentCalories)} kcal`;
-    } else {
-      boldVal = `${Math.round(goalCalories - currentCalories)} kcal`;
-    }
+    boldVal = raw.useCurrentCal
+      ? `${Math.round(currentCalories)} kcal`
+      : `${Math.round(goalCalories - currentCalories)} kcal`;
   } else if (percent < 80) {
     rawList = MID_CAL_MESSAGES;
     boldVal = `${Math.round(goalCalories - currentCalories)} kcal`;
