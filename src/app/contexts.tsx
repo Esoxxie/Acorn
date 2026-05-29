@@ -11,6 +11,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -45,7 +46,15 @@ import {
 import { deleteMealImages, uploadMealImages } from "../lib/storage";
 import type { PreparedImageAssets } from "../lib/image";
 import { appEnv } from "../lib/env";
-import { clearCachedProfile, readCachedProfile, writeCachedProfile } from "../lib/profile-cache";
+import {
+  clearCachedProfile,
+  readCachedProfile,
+  writeCachedProfile,
+  readCachedMeals,
+  writeCachedMeals,
+  readCachedSavedFoods,
+  writeCachedSavedFoods,
+} from "../lib/profile-cache";
 
 type SessionUser = {
   uid: string;
@@ -418,9 +427,19 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   const [profile, setProfile] = useState<UserProfile | null>(() =>
     !user || user.isDemo || appEnv.usingDemoConfig ? null : readCachedProfile(user.uid),
   );
-  const [meals, setMeals] = useState<MealRecord[]>([]);
-  const [savedFoods, setSavedFoods] = useState<SavedFood[]>([]);
-  const [loading, setLoading] = useState(() => !user?.isDemo && !appEnv.usingDemoConfig);
+  const [meals, setMeals] = useState<MealRecord[]>(() =>
+    !user || user.isDemo || appEnv.usingDemoConfig ? [] : readCachedMeals(user.uid),
+  );
+  const [savedFoods, setSavedFoods] = useState<SavedFood[]>(() =>
+    !user || user.isDemo || appEnv.usingDemoConfig ? [] : readCachedSavedFoods(user.uid),
+  );
+  const [loading, setLoading] = useState(() => {
+    if (!user || user.isDemo || appEnv.usingDemoConfig) {
+      return false;
+    }
+    const hasCache = readCachedProfile(user.uid) !== null;
+    return !hasCache;
+  });
   const [appDataErrors, setAppDataErrors] = useState<AppDataErrorState>({ ...EMPTY_APP_DATA_ERRORS });
   const latestProfileRef = useRef<UserProfile | null>(profile);
 
@@ -509,13 +528,15 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         },
       ),
       onSnapshot(
-        query(collection(db, `users/${user.uid}/meals`), orderBy("loggedAt", "desc")),
+        query(collection(db, `users/${user.uid}/meals`), orderBy("loggedAt", "desc"), limit(150)),
         (snapshot) => {
           if (!active) {
             return;
           }
 
-          setMeals(snapshot.docs.map((mealDoc) => ensureMeal(mealDoc.data() as Partial<MealRecord>, mealDoc.id)));
+          const fetchedMeals = snapshot.docs.map((mealDoc) => ensureMeal(mealDoc.data() as Partial<MealRecord>, mealDoc.id));
+          setMeals(fetchedMeals);
+          writeCachedMeals(user.uid, fetchedMeals);
           setAppDataErrors((current) => ({
             ...current,
             meals: null,
@@ -541,11 +562,11 @@ export function AppDataProvider({ children }: PropsWithChildren) {
             return;
           }
 
-          setSavedFoods(
-            snapshot.docs.map((savedFoodDoc) =>
-              ensureSavedFood(savedFoodDoc.data() as Partial<SavedFood>, savedFoodDoc.id),
-            ),
+          const fetchedSavedFoods = snapshot.docs.map((savedFoodDoc) =>
+            ensureSavedFood(savedFoodDoc.data() as Partial<SavedFood>, savedFoodDoc.id),
           );
+          setSavedFoods(fetchedSavedFoods);
+          writeCachedSavedFoods(user.uid, fetchedSavedFoods);
           setAppDataErrors((current) => ({
             ...current,
             savedFoods: null,

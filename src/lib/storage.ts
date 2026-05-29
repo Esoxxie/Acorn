@@ -12,26 +12,33 @@ export async function uploadMealImages(
 ): Promise<MealPhoto> {
   const displayPath = `users/${uid}/meals/${mealId}/display.webp`;
   const thumbPath = `users/${uid}/meals/${mealId}/thumb.webp`;
+  const displayRef = ref(storage, displayPath);
+  const thumbRef = ref(storage, thumbPath);
 
   await Promise.all([
-    uploadBytes(ref(storage, displayPath), assets.displayBlob, {
+    uploadBytes(displayRef, assets.displayBlob, {
       contentType: assets.displayBlob.type,
       cacheControl: "public,max-age=31536000,immutable",
     }),
-    uploadBytes(ref(storage, thumbPath), assets.thumbBlob, {
+    uploadBytes(thumbRef, assets.thumbBlob, {
       contentType: assets.thumbBlob.type,
       cacheControl: "public,max-age=31536000,immutable",
     }),
   ]);
 
+  const [displayUrl, thumbUrl] = await Promise.all([
+    getDownloadURL(displayRef),
+    getDownloadURL(thumbRef),
+  ]);
+
   return {
-    storagePath: displayPath,
-    thumbPath,
+    storagePath: displayUrl,
+    thumbPath: thumbUrl,
   };
 }
 
 export async function resolveStorageUrl(path: string): Promise<string> {
-  if (path.startsWith("data:") || path.startsWith("blob:")) {
+  if (path.startsWith("data:") || path.startsWith("blob:") || path.startsWith("http")) {
     return path;
   }
 

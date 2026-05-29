@@ -98,13 +98,14 @@ export async function prepareImageAssets(file: File): Promise<PreparedImageAsset
   const decodedImage = await decodeImage(file);
 
   try {
-    const [displayBlob, thumbBlob] = await Promise.all([
+    const [displayBlob, thumbBlob, geminiBlob] = await Promise.all([
       resizeDecodedImage(decodedImage, 1280, 0.84),
       resizeDecodedImage(decodedImage, 360, 0.8),
+      resizeDecodedImage(decodedImage, 720, 0.8),
     ]);
     const [previewUrl, imageBase64] = [
       URL.createObjectURL(displayBlob),
-      await blobToDataUrl(displayBlob).then((url) => url.split(",")[1] ?? ""),
+      await blobToDataUrl(geminiBlob).then((url) => url.split(",")[1] ?? ""),
     ];
 
     return {
@@ -112,7 +113,7 @@ export async function prepareImageAssets(file: File): Promise<PreparedImageAsset
       thumbBlob,
       previewUrl,
       imageBase64,
-      mimeType: displayBlob.type || "image/webp",
+      mimeType: geminiBlob.type || "image/webp",
     };
   } finally {
     decodedImage.close();

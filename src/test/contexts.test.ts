@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildProfileBootstrapPatch, mergeProfileSources } from "../app/contexts";
-import { clearCachedProfile, readCachedProfile, writeCachedProfile } from "../lib/profile-cache";
+import {
+  clearCachedProfile,
+  readCachedProfile,
+  writeCachedProfile,
+  readCachedMeals,
+  writeCachedMeals,
+  readCachedSavedFoods,
+  writeCachedSavedFoods,
+} from "../lib/profile-cache";
 
 describe("buildProfileBootstrapPatch", () => {
   it("does not include nullable profile fields that would wipe saved Firestore data", () => {
@@ -112,16 +120,74 @@ describe("profile cache", () => {
     updatedAt: "2026-03-27T20:10:00.000Z",
   };
 
+  const meals = [
+    {
+      id: "meal-1",
+      source: "manual_ai" as const,
+      mealTitle: "Porridge",
+      summary: "Haferflocken mit Milch",
+      items: [],
+      calories: 350,
+      macros: { protein: 12, carbs: 55, fat: 6, fiber: 8 },
+      confidence: 90,
+      assumptions: [],
+      loggedAt: "2026-03-27T08:00:00.000Z",
+      percentOfDailySpend: 15,
+      favorite: false,
+    },
+  ];
+
+  const savedFoods = [
+    {
+      id: "food-1",
+      title: "Banana",
+      summary: "1 mittlere Banane",
+      items: [],
+      calories: 105,
+      macros: { protein: 1.3, carbs: 27, fat: 0.3, fiber: 3.1 },
+      defaultServingLabel: "1 Stück",
+      usageCount: 5,
+      favorite: true,
+    },
+  ];
+
   beforeEach(() => {
     window.localStorage.clear();
   });
 
-  it("reads and clears cached profiles by uid", () => {
+  it("reads, writes and clears cached profile data", () => {
     writeCachedProfile(uid, profile);
-
     expect(readCachedProfile(uid)).toEqual(profile);
 
     clearCachedProfile(uid);
     expect(readCachedProfile(uid)).toBeNull();
+  });
+
+  it("reads, writes and clears cached meals", () => {
+    expect(readCachedMeals(uid)).toEqual([]);
+    writeCachedMeals(uid, meals);
+    expect(readCachedMeals(uid)).toEqual(meals);
+  });
+
+  it("reads, writes and clears cached saved foods", () => {
+    expect(readCachedSavedFoods(uid)).toEqual([]);
+    writeCachedSavedFoods(uid, savedFoods);
+    expect(readCachedSavedFoods(uid)).toEqual(savedFoods);
+  });
+
+  it("clears profile, meals, and saved foods with clearCachedProfile", () => {
+    writeCachedProfile(uid, profile);
+    writeCachedMeals(uid, meals);
+    writeCachedSavedFoods(uid, savedFoods);
+
+    expect(readCachedProfile(uid)).toEqual(profile);
+    expect(readCachedMeals(uid)).toEqual(meals);
+    expect(readCachedSavedFoods(uid)).toEqual(savedFoods);
+
+    clearCachedProfile(uid);
+
+    expect(readCachedProfile(uid)).toBeNull();
+    expect(readCachedMeals(uid)).toEqual([]);
+    expect(readCachedSavedFoods(uid)).toEqual([]);
   });
 });
