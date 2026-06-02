@@ -12,7 +12,8 @@ import {
   type MacroProgressRow,
 } from "../lib/nutrition-visuals";
 import { getMascotMessage } from "../lib/mascot-messages";
-import { getWinStreakDetails } from "../lib/win-streak";
+import { getWinStreakDetails, WIN_STREAK_STAGES, type WinStreakStage } from "../lib/win-streak";
+import { BottomSheet } from "./BottomSheet";
 import "../styles/nutrition-visuals.css";
 
 type RadialGoalRingProps = {
@@ -42,11 +43,11 @@ function clampToCanvas(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
-function AcornBadgeIcon() {
+function AcornBadgeIcon({ className }: { className?: string }) {
   return (
     <svg
       aria-hidden="true"
-      className="win-streak-badge__icon"
+      className={["win-streak-badge__icon", className].filter(Boolean).join(" ")}
       viewBox="0 0 48 48"
     >
       <circle className="win-streak-badge__halo" cx="24" cy="24" r="21.5" />
@@ -75,8 +76,88 @@ function AcornBadgeIcon() {
   );
 }
 
+function CompactWinStreakBadge({
+  badgeText,
+  className,
+  stage,
+  progressPercent,
+}: {
+  badgeText: string;
+  className?: string;
+  stage: WinStreakStage;
+  progressPercent: number;
+}) {
+  return (
+    <div
+      className={["win-streak", `win-streak--${stage.key}`, className].filter(Boolean).join(" ")}
+      style={{ "--win-streak-progress": `${progressPercent}%` } as CSSProperties}
+    >
+      <div className="win-streak__copy">
+        <strong className="win-streak__badge-text">{badgeText}</strong>
+        <div className="win-streak__track" aria-hidden="true">
+          <span className="win-streak__fill" />
+        </div>
+      </div>
+      <AcornBadgeIcon />
+    </div>
+  );
+}
+
+function WinStreakBadgeGrid({
+  selectedStageKey,
+  setSelectedStageKey,
+  streakDays,
+}: {
+  selectedStageKey: string;
+  setSelectedStageKey: (stageKey: string) => void;
+  streakDays: number;
+}) {
+  return (
+    <div className="win-streak-grid" aria-label="Win-Streak Badges">
+      {WIN_STREAK_STAGES.map((stage) => {
+        const unlocked = streakDays >= stage.days;
+        const selected = selectedStageKey === stage.key;
+
+        return (
+          <button
+            aria-label={`${stage.title}, ${stage.days} Tage${unlocked ? "" : ", noch nicht freigeschaltet"}`}
+            className={[
+              "win-streak-grid__item",
+              `win-streak--${stage.key}`,
+              unlocked ? "is-unlocked" : "is-locked",
+              selected ? "is-selected" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            key={stage.key}
+            onClick={() => setSelectedStageKey(stage.key)}
+            type="button"
+          >
+            <AcornBadgeIcon className="win-streak-grid__icon" />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function getStageProgress(streakDays: number, stage: WinStreakStage) {
+  return Math.max(0, Math.min(1, streakDays / stage.days));
+}
+
+function getStageProgressText(streakDays: number, stage: WinStreakStage) {
+  if (streakDays >= stage.days) {
+    return "Freigeschaltet";
+  }
+
+  const missingDays = stage.days - streakDays;
+  return `Noch ${missingDays} ${missingDays === 1 ? "Tag" : "Tage"}`;
+}
+
 function WinStreakBadge({ streakDays }: { streakDays: number }) {
+  const [sheetOpen, setSheetOpen] = useState(false);
   const details = getWinStreakDetails(streakDays);
+  const [selectedStageKey, setSelectedStageKey] = useState<string | null>(null);
 
   if (!details.currentStage || !details.badgeText) {
     return null;
@@ -84,21 +165,54 @@ function WinStreakBadge({ streakDays }: { streakDays: number }) {
 
   const progressPercent = Math.round(details.progress * 100);
   const nextStageText = details.nextStage ? `Nächste Stufe: ${details.nextStage.days} Tage.` : "Höchste Stufe erreicht.";
+  const selectedKey = selectedStageKey ?? details.currentStage.key;
+  const selectedStage = WIN_STREAK_STAGES.find((stage) => stage.key === selectedKey) ?? details.currentStage;
+  const selectedStageProgress = Math.round(getStageProgress(streakDays, selectedStage) * 100);
+  const selectedStageProgressText = getStageProgressText(streakDays, selectedStage);
 
   return (
-    <div
-      aria-label={`Win-Streak: ${streakDays} Tage in Folge. ${details.badgeText}. ${nextStageText}`}
-      className={`win-streak win-streak--${details.currentStage.key}`}
-      style={{ "--win-streak-progress": `${progressPercent}%` } as CSSProperties}
-    >
-      <div className="win-streak__copy">
-        <strong className="win-streak__badge-text">{details.badgeText}</strong>
-        <div className="win-streak__track" aria-hidden="true">
-          <span className="win-streak__fill" />
+    <>
+      <button
+        aria-label={`Win-Streak öffnen. ${streakDays} Tage in Folge. ${details.badgeText}. ${nextStageText}`}
+        className="win-streak-trigger"
+        onClick={() => {
+          setSelectedStageKey(details.currentStage!.key);
+          setSheetOpen(true);
+        }}
+        type="button"
+      >
+        <CompactWinStreakBadge
+          badgeText={details.badgeText}
+          progressPercent={progressPercent}
+          stage={details.currentStage}
+        />
+      </button>
+
+      <BottomSheet
+        onClose={() => setSheetOpen(false)}
+        open={sheetOpen}
+        title="Win-Streak"
+      >
+        <div className="win-streak-sheet">
+          <div className={`win-streak-sheet__selected win-streak--${selectedStage.key}`}>
+            <AcornBadgeIcon className="win-streak-sheet__selected-icon" />
+            <div className="win-streak-sheet__selected-copy">
+              <span>{selectedStage.title}</span>
+              <strong>{selectedStage.days} Tage</strong>
+              <div className="win-streak-sheet__selected-progress" aria-hidden="true">
+                <span style={{ width: `${selectedStageProgress}%` }} />
+              </div>
+              <small>{selectedStageProgressText}</small>
+            </div>
+          </div>
+          <WinStreakBadgeGrid
+            selectedStageKey={selectedKey}
+            setSelectedStageKey={setSelectedStageKey}
+            streakDays={streakDays}
+          />
         </div>
-      </div>
-      <AcornBadgeIcon />
-    </div>
+      </BottomSheet>
+    </>
   );
 }
 
