@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, useRef } from "react";
+import { useEffect, useId, useState, useRef, type CSSProperties } from "react";
 import { Target, Leaf, Droplet, Wheat } from "lucide-react";
 import type { MacroSnapshot, UserProfile } from "../../shared/models";
 import { uiCopy } from "../lib/copy";
@@ -12,6 +12,7 @@ import {
   type MacroProgressRow,
 } from "../lib/nutrition-visuals";
 import { getMascotMessage } from "../lib/mascot-messages";
+import { getWinStreakDetails } from "../lib/win-streak";
 import "../styles/nutrition-visuals.css";
 
 type RadialGoalRingProps = {
@@ -33,11 +34,72 @@ type DailySummaryCardProps = {
   currentCalories: number;
   goalCalories: number | null;
   missingProfileFields: string[];
+  streakDays: number;
   title?: string;
 };
 
 function clampToCanvas(value: number) {
   return Math.max(0, Math.min(100, value));
+}
+
+function AcornBadgeIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="win-streak-badge__icon"
+      viewBox="0 0 48 48"
+    >
+      <circle className="win-streak-badge__halo" cx="24" cy="24" r="21.5" />
+      <path
+        className="win-streak-badge__frame"
+        d="M24 4.5 40.9 14.2v19.6L24 43.5 7.1 33.8V14.2L24 4.5Z"
+      />
+      <path
+        className="win-streak-badge__facet"
+        d="M24 9.4 36.7 16.7v14.6L24 38.6 11.3 31.3V16.7L24 9.4Z"
+      />
+      <path
+        className="win-streak-badge__cap"
+        d="M16.4 22c.9-5.2 4.2-8.4 7.6-8.4s6.7 3.2 7.6 8.4c-3.2 1.6-6.1 1.8-7.6 1.8s-4.4-.2-7.6-1.8Z"
+      />
+      <path
+        className="win-streak-badge__nut"
+        d="M15.8 23.5c0-2 3.6-3.5 8.2-3.5s8.2 1.5 8.2 3.5c0 5.8-3.4 12.4-8.2 12.4s-8.2-6.6-8.2-12.4Z"
+      />
+      <path
+        className="win-streak-badge__stem"
+        d="M24.2 13.7c-.4-2.2.4-3.8 2.4-4.8"
+      />
+      <path className="win-streak-badge__shine" d="M18.8 25.4c1.6 1 4.7 1.2 7.7.4" />
+    </svg>
+  );
+}
+
+function WinStreakBadge({ streakDays }: { streakDays: number }) {
+  const details = getWinStreakDetails(streakDays);
+
+  if (!details.currentStage || !details.badgeText) {
+    return null;
+  }
+
+  const progressPercent = Math.round(details.progress * 100);
+  const nextStageText = details.nextStage ? `Nächste Stufe: ${details.nextStage.days} Tage.` : "Höchste Stufe erreicht.";
+
+  return (
+    <div
+      aria-label={`Win-Streak: ${streakDays} Tage in Folge. ${details.badgeText}. ${nextStageText}`}
+      className={`win-streak win-streak--${details.currentStage.key}`}
+      style={{ "--win-streak-progress": `${progressPercent}%` } as CSSProperties}
+    >
+      <div className="win-streak__copy">
+        <strong className="win-streak__badge-text">{details.badgeText}</strong>
+        <div className="win-streak__track" aria-hidden="true">
+          <span className="win-streak__fill" />
+        </div>
+      </div>
+      <AcornBadgeIcon />
+    </div>
+  );
 }
 
 
@@ -325,6 +387,7 @@ export function DailySummaryCard({
   currentCalories,
   goalCalories,
   missingProfileFields,
+  streakDays,
   title = uiCopy.summary.title,
 }: Omit<DailySummaryCardProps, "macroTotals">) {
   const subtitle = goalCalories
@@ -349,6 +412,8 @@ export function DailySummaryCard({
           </div>
         ) : null}
       </div>
+
+      <WinStreakBadge streakDays={streakDays} />
 
       <div className="daily-summary-card__hero">
         <SquirrelAcornStatus currentCalories={currentCalories} goalCalories={goalCalories} />

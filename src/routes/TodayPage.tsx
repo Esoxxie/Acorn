@@ -10,6 +10,7 @@ import { uiCopy } from "../lib/copy";
 import { formatCalories, formatDateLabel } from "../lib/format";
 import { addDaysToLocalDayKey, createTimestampForLocalDay, getLocalDayKey } from "../../shared/date";
 import { getFoodIcon } from "../lib/food-icons";
+import { getWinStreakDays } from "../lib/win-streak";
 
 function sumMacros(meals: Array<{ macros: MacroSnapshot }>): MacroSnapshot {
   return meals.reduce(
@@ -115,6 +116,7 @@ export function TodayPage() {
   const selectedMacros = sumMacros(selectedMeals);
   const weeklyAverage = useMemo(() => getDailyAverage(meals, selectedDayKey, 7), [meals, selectedDayKey]);
   const monthlyAverage = useMemo(() => getDailyAverage(meals, selectedDayKey, 30), [meals, selectedDayKey]);
+  const winStreakDays = useMemo(() => getWinStreakDays(meals, selectedDayKey), [meals, selectedDayKey]);
   const chartSeries = useMemo(() => getDailySeries(meals, selectedDayKey, 30), [meals, selectedDayKey]);
   const chartMaxCalories = Math.max(1, ...chartSeries.map((day) => day.calories));
   const dailySpend = profile?.goalMode === "manual"
@@ -207,6 +209,7 @@ export function TodayPage() {
           currentCalories={selectedCalories}
           goalCalories={dailySpend}
           missingProfileFields={missingProfileFields}
+          streakDays={winStreakDays}
           title="Bilanz"
         />
 
