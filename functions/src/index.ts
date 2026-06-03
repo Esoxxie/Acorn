@@ -78,7 +78,7 @@ async function consumeDailyUsage(uid: string, limit: number) {
 
 async function assertAllowedUser(uid: string) {
   const [allowlistSnapshot, userSnapshot] = await Promise.all([
-    db.doc(`access/allowedUsers/${uid}`).get(),
+    db.doc(`allowedUsers/${uid}`).get(),
     db.doc(`users/${uid}`).get(),
   ]);
 

@@ -41,7 +41,7 @@ suite("firestore rules", () => {
     testEnvironment = await initializeRulesTestEnvironment();
 
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
-      await setDoc(doc(context.firestore(), "access/allowedUsers/alice"), { note: "private user" });
+      await setDoc(doc(context.firestore(), "allowedUsers/alice"), { note: "private user" });
       await setDoc(doc(context.firestore(), "users/carol"), { units: "metric" });
     });
 
@@ -53,14 +53,14 @@ suite("firestore rules", () => {
     await assertSucceeds(setDoc(doc(carol, "users/carol"), { units: "metric", themePreference: "system" }));
     await assertFails(setDoc(doc(bob, "users/bob"), { units: "metric" }));
     await assertFails(getDoc(doc(bob, "users/alice")));
-    await assertFails(getDoc(doc(alice, "access/allowedUsers/alice")));
+    await assertFails(getDoc(doc(alice, "allowedUsers/alice")));
   });
 
   it("restricts storage writes to allowlisted webp meal images", async () => {
     testEnvironment = await initializeRulesTestEnvironment();
 
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
-      await setDoc(doc(context.firestore(), "access/allowedUsers/alice"), { note: "private user" });
+      await setDoc(doc(context.firestore(), "allowedUsers/alice"), { note: "private user" });
       await setDoc(doc(context.firestore(), "users/carol"), { units: "metric" });
     });
 

@@ -9,18 +9,21 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
-    function isAllowedUser(uid) {
-      return exists(/databases/$(database)/documents/access/allowedUsers/$(uid))
-        || exists(/databases/$(database)/documents/users/$(uid));
+    function hasAllowlistEntry(uid) {
+      return exists(/databases/$(database)/documents/allowedUsers/$(uid));
     }
 
-    match /access/{document=**} {
+    function isAllowedUser(uid) {
+      return hasAllowlistEntry(uid) || exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    match /allowedUsers/{uid} {
       allow read, write: if false;
     }
 
     match /users/{uid} {
       allow read, update: if isOwner(uid) && isAllowedUser(uid);
-      allow create: if isOwner(uid) && exists(/databases/$(database)/documents/access/allowedUsers/$(uid));
+      allow create: if isOwner(uid) && hasAllowlistEntry(uid);
       allow delete: if false;
 
       match /meals/{mealId} {

@@ -50,7 +50,7 @@ The Playwright project uses a Galaxy S23-like mobile profile: `360 x 780`, `devi
 5. Optional function params:
    - `GEMINI_MODEL` defaults to `gemini-3.1-flash-lite`
    - `MAX_DAILY_AI_CALLS` defaults to `15`
-6. Allow the private users by creating one Firestore document per UID at `access/allowedUsers/{uid}`. The document can be empty or contain a note.
+6. Allow new private users by creating one Firestore document per UID at `allowedUsers/{uid}`. Existing `users/{uid}` profiles remain allowed.
 7. Deploy:
    - `npm run deploy`
 
