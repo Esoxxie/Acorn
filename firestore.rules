@@ -9,20 +9,28 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    function isAllowedUser(uid) {
+      return exists(/databases/$(database)/documents/access/allowedUsers/$(uid));
+    }
+
+    match /access/{document=**} {
+      allow read, write: if false;
+    }
+
     match /users/{uid} {
-      allow read, create, update: if isOwner(uid);
+      allow read, create, update: if isOwner(uid) && isAllowedUser(uid);
       allow delete: if false;
 
       match /meals/{mealId} {
-        allow read, create, update, delete: if isOwner(uid);
+        allow read, create, update, delete: if isOwner(uid) && isAllowedUser(uid);
       }
 
       match /savedFoods/{foodId} {
-        allow read, create, update, delete: if isOwner(uid);
+        allow read, create, update, delete: if isOwner(uid) && isAllowedUser(uid);
       }
 
       match /usage/{dayId} {
-        allow read, write: if isOwner(uid);
+        allow read, write: if isOwner(uid) && isAllowedUser(uid);
       }
     }
   }

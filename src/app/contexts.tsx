@@ -528,7 +528,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         },
       ),
       onSnapshot(
-        query(collection(db, `users/${user.uid}/meals`), orderBy("loggedAt", "desc"), limit(150)),
+        query(collection(db, `users/${user.uid}/meals`), orderBy("loggedAt", "desc"), limit(90)),
         (snapshot) => {
           if (!active) {
             return;

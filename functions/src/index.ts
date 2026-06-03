@@ -13,7 +13,7 @@ if (!getApps().length) {
 const db = getFirestore();
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 const GEMINI_MODEL = defineString("GEMINI_MODEL", { default: "gemini-3.1-flash-lite" });
-const MAX_DAILY_AI_CALLS = defineString("MAX_DAILY_AI_CALLS", { default: "30" });
+const MAX_DAILY_AI_CALLS = defineString("MAX_DAILY_AI_CALLS", { default: "15" });
 
 function getUserSafeAnalyzeErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
@@ -76,11 +76,20 @@ async function consumeDailyUsage(uid: string, limit: number) {
   });
 }
 
+async function assertAllowedUser(uid: string) {
+  const snapshot = await db.doc(`access/allowedUsers/${uid}`).get();
+
+  if (!snapshot.exists) {
+    throw new HttpsError("permission-denied", "Dieses Konto ist fuer Acorn nicht freigeschaltet.");
+  }
+}
+
 export const analyzeEntry = onCall(
   {
     region: "europe-west3",
     timeoutSeconds: 60,
-    memory: "512MiB",
+    memory: "256MiB",
+    maxInstances: 2,
     cors: ["https://acorn-99388.web.app", "https://acorn-99388.firebaseapp.com"],
     invoker: "public",
     secrets: [GEMINI_API_KEY],
@@ -89,6 +98,7 @@ export const analyzeEntry = onCall(
     if (!request.auth?.uid) {
       throw new HttpsError("unauthenticated", "Melde dich an, bevor du eine Schaetzung anforderst.");
     }
+    await assertAllowedUser(request.auth.uid);
 
     const parsedInput = analyzeEntryInputSchema.safeParse(request.data);
     if (!parsedInput.success) {

@@ -9,8 +9,30 @@ service firebase.storage {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    function isAllowedUser(uid) {
+      return firestore.exists(/databases/(default)/documents/access/allowedUsers/$(uid));
+    }
+
+    function isAllowedMealImage(fileName) {
+      return fileName in ["display.webp", "thumb.webp"];
+    }
+
+    function isWebpImage() {
+      return request.resource.contentType == "image/webp";
+    }
+
+    function isReasonableMealImageSize() {
+      return request.resource.size <= 2 * 1024 * 1024;
+    }
+
     match /users/{uid}/meals/{mealId}/{fileName} {
-      allow read, write: if isOwner(uid);
+      allow read: if isOwner(uid) && isAllowedUser(uid);
+      allow create, update: if isOwner(uid)
+        && isAllowedUser(uid)
+        && isAllowedMealImage(fileName)
+        && isWebpImage()
+        && isReasonableMealImageSize();
+      allow delete: if isOwner(uid) && isAllowedUser(uid) && isAllowedMealImage(fileName);
     }
   }
 }

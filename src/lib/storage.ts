@@ -31,9 +31,12 @@ export async function uploadMealImages(
     getDownloadURL(thumbRef),
   ]);
 
+  urlCache.set(displayPath, displayUrl);
+  urlCache.set(thumbPath, thumbUrl);
+
   return {
-    storagePath: displayUrl,
-    thumbPath: thumbUrl,
+    storagePath: displayPath,
+    thumbPath,
   };
 }
 
