@@ -10,7 +10,8 @@ service firebase.storage {
     }
 
     function isAllowedUser(uid) {
-      return firestore.exists(/databases/(default)/documents/access/allowedUsers/$(uid));
+      return firestore.exists(/databases/(default)/documents/access/allowedUsers/$(uid))
+        || firestore.exists(/databases/(default)/documents/users/$(uid));
     }
 
     function isAllowedMealImage(fileName) {

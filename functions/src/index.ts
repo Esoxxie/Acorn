@@ -77,9 +77,12 @@ async function consumeDailyUsage(uid: string, limit: number) {
 }
 
 async function assertAllowedUser(uid: string) {
-  const snapshot = await db.doc(`access/allowedUsers/${uid}`).get();
+  const [allowlistSnapshot, userSnapshot] = await Promise.all([
+    db.doc(`access/allowedUsers/${uid}`).get(),
+    db.doc(`users/${uid}`).get(),
+  ]);
 
-  if (!snapshot.exists) {
+  if (!allowlistSnapshot.exists && !userSnapshot.exists) {
     throw new HttpsError("permission-denied", "Dieses Konto ist fuer Acorn nicht freigeschaltet.");
   }
 }

@@ -10,7 +10,8 @@ service cloud.firestore {
     }
 
     function isAllowedUser(uid) {
-      return exists(/databases/$(database)/documents/access/allowedUsers/$(uid));
+      return exists(/databases/$(database)/documents/access/allowedUsers/$(uid))
+        || exists(/databases/$(database)/documents/users/$(uid));
     }
 
     match /access/{document=**} {
@@ -18,7 +19,8 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read, create, update: if isOwner(uid) && isAllowedUser(uid);
+      allow read, update: if isOwner(uid) && isAllowedUser(uid);
+      allow create: if isOwner(uid) && exists(/databases/$(database)/documents/access/allowedUsers/$(uid));
       allow delete: if false;
 
       match /meals/{mealId} {

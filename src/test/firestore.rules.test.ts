@@ -37,17 +37,20 @@ suite("firestore rules", () => {
     expect(testEnvironment).toBeTruthy();
   });
 
-  it("allows only allowlisted owners to read and write user documents", async () => {
+  it("allows allowlisted and existing owners to read and write user documents", async () => {
     testEnvironment = await initializeRulesTestEnvironment();
 
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), "access/allowedUsers/alice"), { note: "private user" });
+      await setDoc(doc(context.firestore(), "users/carol"), { units: "metric" });
     });
 
     const alice = testEnvironment.authenticatedContext("alice").firestore();
     const bob = testEnvironment.authenticatedContext("bob").firestore();
+    const carol = testEnvironment.authenticatedContext("carol").firestore();
 
     await assertSucceeds(setDoc(doc(alice, "users/alice"), { units: "metric" }));
+    await assertSucceeds(setDoc(doc(carol, "users/carol"), { units: "metric", themePreference: "system" }));
     await assertFails(setDoc(doc(bob, "users/bob"), { units: "metric" }));
     await assertFails(getDoc(doc(bob, "users/alice")));
     await assertFails(getDoc(doc(alice, "access/allowedUsers/alice")));
@@ -58,14 +61,17 @@ suite("firestore rules", () => {
 
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), "access/allowedUsers/alice"), { note: "private user" });
+      await setDoc(doc(context.firestore(), "users/carol"), { units: "metric" });
     });
 
     const aliceStorage = testEnvironment.authenticatedContext("alice").storage();
     const bobStorage = testEnvironment.authenticatedContext("bob").storage();
+    const carolStorage = testEnvironment.authenticatedContext("carol").storage();
     const webpBlob = new Blob(["image"], { type: "image/webp" });
     const jpegBlob = new Blob(["image"], { type: "image/jpeg" });
 
     await assertSucceeds(uploadBytes(ref(aliceStorage, "users/alice/meals/meal-1/display.webp"), webpBlob));
+    await assertSucceeds(uploadBytes(ref(carolStorage, "users/carol/meals/meal-1/display.webp"), webpBlob));
     await assertSucceeds(uploadBytes(ref(aliceStorage, "users/alice/meals/meal-1/thumb.webp"), webpBlob));
     await assertFails(uploadBytes(ref(aliceStorage, "users/alice/meals/meal-1/original.webp"), webpBlob));
     await assertFails(uploadBytes(ref(aliceStorage, "users/alice/meals/meal-1/display.jpg"), jpegBlob));
