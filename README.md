@@ -48,7 +48,7 @@ The Playwright project uses a Galaxy S23-like mobile profile: `360 x 780`, `devi
 4. Set the Gemini secret:
    - `firebase functions:secrets:set GEMINI_API_KEY`
 5. Optional function params:
-   - `GEMINI_MODEL` defaults to `gemini-3.5-flash`
+   - `GEMINI_MODEL` defaults to `gemini-3.1-flash-lite`
    - `MAX_DAILY_AI_CALLS` defaults to `30`
 6. Deploy:
    - `npm run deploy`
