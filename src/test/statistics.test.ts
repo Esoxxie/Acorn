@@ -23,18 +23,19 @@ function mockMeal(loggedAt: string, calories: number): MealRecord {
 }
 
 describe("getDailyAverage statistics helper", () => {
-  it("returns zeros if no meals exist on or before the selected date", () => {
+  it("returns zeros if no meals exist before the selected date", () => {
     const meals: MealRecord[] = [];
     const avg = getDailyAverage(meals, "2026-05-25", 7);
     expect(avg).toEqual({ calories: 0, meals: 0 });
   });
 
-  it("calculates average over active days, ignoring future entries", () => {
+  it("calculates average over past active days, ignoring the selected day and future entries", () => {
     const meals: MealRecord[] = [
       mockMeal("2026-05-20T10:00:00Z", 500), // Active Day 1
       mockMeal("2026-05-20T14:00:00Z", 700), // Active Day 1 (Total: 1200 kcal, 2 meals)
       mockMeal("2026-05-22T08:00:00Z", 1500), // Active Day 2 (Total: 1500 kcal, 1 meal)
       // 2026-05-21 is completely empty (forgotten day)
+      mockMeal("2026-05-25T12:00:00Z", 3000), // Selected day (should be ignored for past averages)
       mockMeal("2026-05-26T12:00:00Z", 2000), // Future day (should be ignored when selectedDayKey is 2026-05-25)
     ];
 

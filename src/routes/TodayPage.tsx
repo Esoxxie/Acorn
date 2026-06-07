@@ -32,7 +32,7 @@ export function getDailyAverage(meals: MealRecord[], selectedDayKey: string, day
   const mealsByDay = new Map<string, MealRecord[]>();
   for (const meal of meals) {
     const dayKey = getLocalDayKey(meal.loggedAt);
-    if (dayKey <= selectedDayKey) {
+    if (dayKey < selectedDayKey) {
       const dayMeals = mealsByDay.get(dayKey) || [];
       dayMeals.push(meal);
       mealsByDay.set(dayKey, dayMeals);

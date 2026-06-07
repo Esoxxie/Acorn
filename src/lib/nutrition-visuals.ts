@@ -90,7 +90,7 @@ export function buildMacroProgressRows(
       label,
       current,
       target,
-      percent: target && target > 0 ? clampPercent((current / target) * 100) : null,
+      percent: target && target > 0 ? Math.max(0, (current / target) * 100) : null,
       color,
     };
   });
