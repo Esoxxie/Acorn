@@ -46,6 +46,7 @@ import { createSeededDemoData } from "../lib/demo-data";
 import {
   auth,
   db,
+  finishRedirectSignIn,
   getAuthErrorMessage,
   startGoogleSignIn,
 } from "../lib/firebase";
@@ -372,6 +373,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return;
     }
 
+    finishRedirectSignIn().catch((error) => {
+      setAuthError(getAuthErrorMessage(error));
+      setLoading(false);
+    });
+
     const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
       const sessionUser = nextUser
         ? {
@@ -389,11 +395,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
 
       const now = new Date().toISOString();
-      await setDoc(
-        doc(db, "users", sessionUser.uid),
-        buildProfileBootstrapPatch(sessionUser, now),
-        { merge: true },
-      );
+      try {
+        await setDoc(
+          doc(db, "users", sessionUser.uid),
+          buildProfileBootstrapPatch(sessionUser, now),
+          { merge: true },
+        );
+      } catch (error) {
+        setAuthError(getSyncErrorMessage(error, "Dein Konto konnte nicht fuer Acorn vorbereitet werden."));
+      }
     });
 
     return unsubscribe;
