@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { MealRecord } from "../../shared/models";
-import { getWinStreakDays, getWinStreakDetails } from "../lib/win-streak";
+import type { DailyStats, MealRecord } from "../../shared/models";
+import { getWinStreakDays, getWinStreakDaysFromDailyStats, getWinStreakDetails } from "../lib/win-streak";
 
 function mockMeal(dayKey: string): MealRecord {
   return {
@@ -18,6 +18,16 @@ function mockMeal(dayKey: string): MealRecord {
     favorite: false,
     servings: 1,
     baseSnapshot: { calories: 500, macros: { protein: 0, carbs: 0, fat: 0, fiber: 0 }, items: [] },
+  };
+}
+
+function mockStats(dayKey: string, mealCount = 1): DailyStats {
+  return {
+    id: dayKey,
+    dayKey,
+    mealCount,
+    calories: mealCount ? 500 : 0,
+    macros: { protein: 0, carbs: 0, fat: 0, fiber: 0 },
   };
 }
 
@@ -53,6 +63,18 @@ describe("win streak helpers", () => {
     ];
 
     expect(getWinStreakDays(meals, "2026-06-02")).toBe(2);
+  });
+
+  it("counts streaks from daily stats without loading every meal document", () => {
+    const dailyStats = [
+      mockStats("2026-05-29"),
+      mockStats("2026-05-30"),
+      mockStats("2026-05-31"),
+      mockStats("2026-06-01"),
+      mockStats("2026-06-02"),
+    ];
+
+    expect(getWinStreakDaysFromDailyStats(dailyStats, "2026-06-02")).toBe(5);
   });
 
   it("returns the current badge and next threshold", () => {

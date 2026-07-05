@@ -338,6 +338,10 @@ a {
   border: 1px solid var(--line);
 }
 
+.library-load-more {
+  width: 100%;
+}
+
 .pill-button {
   min-height: 40px;
   padding: 0 13px;

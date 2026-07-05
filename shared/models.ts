@@ -129,3 +129,12 @@ export type SavedFood = {
   linkedMealId?: string | null;
   favorite: boolean;
 };
+
+export type DailyStats = {
+  id: string;
+  dayKey: string;
+  mealCount: number;
+  calories: number;
+  macros: MacroSnapshot;
+  updatedAt?: string | null;
+};

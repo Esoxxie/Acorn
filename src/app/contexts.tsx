@@ -11,15 +11,21 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
+  increment,
   limit,
   onSnapshot,
   orderBy,
   query,
+  type QueryDocumentSnapshot,
   setDoc,
+  startAfter,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import type {
+  DailyStats,
   MealEstimate,
   MealRecord,
   MealSource,
@@ -46,6 +52,7 @@ import {
 import { deleteMealImages, uploadMealImages } from "../lib/storage";
 import type { PreparedImageAssets } from "../lib/image";
 import { appEnv } from "../lib/env";
+import { buildDailyStatsFromMeals, ensureDailyStats, mergeDailyStatsByDay, mergeMealsById } from "../lib/daily-stats";
 import {
   clearCachedProfile,
   readCachedProfile,
@@ -55,6 +62,7 @@ import {
   readCachedSavedFoods,
   writeCachedSavedFoods,
 } from "../lib/profile-cache";
+import { getLocalDayKey } from "../../shared/date";
 
 type SessionUser = {
   uid: string;
@@ -92,9 +100,14 @@ type MealUpdateInput = Partial<Omit<MealRecord, "id" | "servings" | "baseSnapsho
 type AppDataContextValue = {
   profile: UserProfile | null;
   meals: MealRecord[];
+  mealHistory: MealRecord[];
+  dailyStats: DailyStats[];
   savedFoods: SavedFood[];
   loading: boolean;
+  mealHistoryLoading: boolean;
+  hasMoreMealHistory: boolean;
   syncError: string | null;
+  loadMoreMealHistory: () => Promise<void>;
   saveProfile: (profile: UserProfile) => Promise<void>;
   saveThemePreference: (themePreference: ThemePreference) => Promise<void>;
   saveMeal: (input: SaveMealInput) => Promise<void>;
@@ -116,6 +129,10 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 const DEMO_SESSION_KEY = "acorn.demo.session";
 const DEMO_DATA_KEY = "acorn.demo.data";
+const RECENT_MEAL_DAYS = 60;
+const RECENT_MEALS_LIMIT = 240;
+const MEAL_HISTORY_PAGE_SIZE = 80;
+const DAILY_STATS_LIMIT = 400;
 const EMPTY_APP_DATA_ERRORS: AppDataErrorState = {
   profile: null,
   meals: null,
@@ -266,6 +283,23 @@ function ensureSavedFood(raw: Partial<SavedFood>, id: string): SavedFood {
     linkedMealId: raw.linkedMealId ?? null,
     favorite: raw.favorite ?? true,
   };
+}
+
+function getRecentMealCutoffIso(now = new Date()) {
+  const cutoff = new Date(now);
+  cutoff.setDate(cutoff.getDate() - RECENT_MEAL_DAYS);
+  return cutoff.toISOString();
+}
+
+function hasMealStatsChanged(before: MealRecord, after: MealRecord) {
+  return (
+    before.loggedAt !== after.loggedAt ||
+    before.calories !== after.calories ||
+    before.macros.protein !== after.macros.protein ||
+    before.macros.carbs !== after.macros.carbs ||
+    before.macros.fat !== after.macros.fat ||
+    (before.macros.fiber ?? 0) !== (after.macros.fiber ?? 0)
+  );
 }
 
 function normalizeProfile(profile: UserProfile, user: SessionUser): UserProfile {
@@ -430,9 +464,15 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   const [meals, setMeals] = useState<MealRecord[]>(() =>
     !user || user.isDemo || appEnv.usingDemoConfig ? [] : readCachedMeals(user.uid),
   );
+  const [mealHistory, setMealHistory] = useState<MealRecord[]>(() =>
+    !user || user.isDemo || appEnv.usingDemoConfig ? [] : readCachedMeals(user.uid),
+  );
+  const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
   const [savedFoods, setSavedFoods] = useState<SavedFood[]>(() =>
     !user || user.isDemo || appEnv.usingDemoConfig ? [] : readCachedSavedFoods(user.uid),
   );
+  const [mealHistoryLoading, setMealHistoryLoading] = useState(false);
+  const [hasMoreMealHistory, setHasMoreMealHistory] = useState(true);
   const [loading, setLoading] = useState(() => {
     if (!user || user.isDemo || appEnv.usingDemoConfig) {
       return false;
@@ -442,6 +482,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   });
   const [appDataErrors, setAppDataErrors] = useState<AppDataErrorState>({ ...EMPTY_APP_DATA_ERRORS });
   const latestProfileRef = useRef<UserProfile | null>(profile);
+  const mealHistoryCursorRef = useRef<QueryDocumentSnapshot | null>(null);
 
   function setProfileState(nextProfile: UserProfile | null) {
     latestProfileRef.current = nextProfile;
@@ -457,11 +498,23 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   }, [profile]);
 
   useEffect(() => {
+    if (user?.isDemo || appEnv.usingDemoConfig) {
+      setMealHistory(meals);
+      setDailyStats(buildDailyStatsFromMeals(meals));
+    }
+  }, [meals, user]);
+
+  useEffect(() => {
     if (!user) {
       latestProfileRef.current = null;
+      mealHistoryCursorRef.current = null;
       setProfile(null);
       setMeals([]);
+      setMealHistory([]);
+      setDailyStats([]);
       setSavedFoods([]);
+      setMealHistoryLoading(false);
+      setHasMoreMealHistory(true);
       setLoading(false);
       setAppDataErrors({ ...EMPTY_APP_DATA_ERRORS });
       return;
@@ -471,19 +524,27 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       const demoData = loadDemoData(user);
       setProfileState(demoData.profile);
       setMeals(demoData.meals);
+      setMealHistory(demoData.meals);
+      setDailyStats(buildDailyStatsFromMeals(demoData.meals));
       setSavedFoods(demoData.savedFoods);
+      setMealHistoryLoading(false);
+      setHasMoreMealHistory(false);
       setLoading(false);
       setAppDataErrors({ ...EMPTY_APP_DATA_ERRORS });
       return;
     }
 
     setLoading(true);
+    mealHistoryCursorRef.current = null;
+    setMealHistoryLoading(false);
+    setHasMoreMealHistory(true);
     setAppDataErrors({ ...EMPTY_APP_DATA_ERRORS });
 
     let active = true;
     const settled = {
       profile: false,
       meals: false,
+      dailyStats: false,
       savedFoods: false,
     };
     const settle = (key: keyof typeof settled) => {
@@ -492,7 +553,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       }
 
       settled[key] = true;
-      if (settled.profile && settled.meals && settled.savedFoods) {
+      if (settled.profile && settled.meals && settled.dailyStats && settled.savedFoods) {
         setLoading(false);
       }
     };
@@ -528,7 +589,12 @@ export function AppDataProvider({ children }: PropsWithChildren) {
         },
       ),
       onSnapshot(
-        query(collection(db, `users/${user.uid}/meals`), orderBy("loggedAt", "desc"), limit(90)),
+        query(
+          collection(db, `users/${user.uid}/meals`),
+          where("loggedAt", ">=", getRecentMealCutoffIso()),
+          orderBy("loggedAt", "desc"),
+          limit(RECENT_MEALS_LIMIT),
+        ),
         (snapshot) => {
           if (!active) {
             return;
@@ -536,6 +602,10 @@ export function AppDataProvider({ children }: PropsWithChildren) {
 
           const fetchedMeals = snapshot.docs.map((mealDoc) => ensureMeal(mealDoc.data() as Partial<MealRecord>, mealDoc.id));
           setMeals(fetchedMeals);
+          setMealHistory((currentMeals) => mergeMealsById(currentMeals, fetchedMeals));
+          if (!mealHistoryCursorRef.current && snapshot.docs.length > 0) {
+            mealHistoryCursorRef.current = snapshot.docs[snapshot.docs.length - 1];
+          }
           writeCachedMeals(user.uid, fetchedMeals);
           setAppDataErrors((current) => ({
             ...current,
@@ -553,6 +623,27 @@ export function AppDataProvider({ children }: PropsWithChildren) {
             meals: getSyncErrorMessage(error, "Deine Eintraege konnten nicht synchronisiert werden."),
           }));
           settle("meals");
+        },
+      ),
+      onSnapshot(
+        query(collection(db, `users/${user.uid}/dailyStats`), orderBy("dayKey", "desc"), limit(DAILY_STATS_LIMIT)),
+        (snapshot) => {
+          if (!active) {
+            return;
+          }
+
+          setDailyStats(
+            snapshot.docs.map((statsDoc) => ensureDailyStats(statsDoc.data() as Partial<DailyStats>, statsDoc.id)),
+          );
+          settle("dailyStats");
+        },
+        () => {
+          if (!active) {
+            return;
+          }
+
+          setDailyStats([]);
+          settle("dailyStats");
         },
       ),
       onSnapshot(
@@ -592,6 +683,60 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       unsubs.forEach((unsubscribe) => unsubscribe());
     };
   }, [user]);
+
+  async function applyDailyStatsDelta(meal: MealRecord, direction: 1 | -1) {
+    if (!user || user.isDemo || appEnv.usingDemoConfig) {
+      return;
+    }
+
+    const dayKey = getLocalDayKey(meal.loggedAt);
+    const statsRef = doc(db, `users/${user.uid}/dailyStats`, dayKey);
+    await setDoc(
+      statsRef,
+      {
+        id: dayKey,
+        dayKey,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
+    await updateDoc(statsRef, {
+        mealCount: increment(direction),
+        calories: increment(meal.calories * direction),
+        "macros.protein": increment(meal.macros.protein * direction),
+        "macros.carbs": increment(meal.macros.carbs * direction),
+        "macros.fat": increment(meal.macros.fat * direction),
+        "macros.fiber": increment((meal.macros.fiber ?? 0) * direction),
+        updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async function loadMoreMealHistory() {
+    if (!user || user.isDemo || appEnv.usingDemoConfig || mealHistoryLoading || !hasMoreMealHistory) {
+      return;
+    }
+
+    setMealHistoryLoading(true);
+    try {
+      const baseQuery = query(
+        collection(db, `users/${user.uid}/meals`),
+        orderBy("loggedAt", "desc"),
+        ...(mealHistoryCursorRef.current ? [startAfter(mealHistoryCursorRef.current)] : []),
+        limit(MEAL_HISTORY_PAGE_SIZE),
+      );
+      const snapshot = await getDocs(baseQuery);
+      const fetchedMeals = snapshot.docs.map((mealDoc) => ensureMeal(mealDoc.data() as Partial<MealRecord>, mealDoc.id));
+
+      if (snapshot.docs.length > 0) {
+        mealHistoryCursorRef.current = snapshot.docs[snapshot.docs.length - 1];
+      }
+
+      setMealHistory((currentMeals) => mergeMealsById(currentMeals, fetchedMeals));
+      setHasMoreMealHistory(snapshot.docs.length === MEAL_HISTORY_PAGE_SIZE);
+    } finally {
+      setMealHistoryLoading(false);
+    }
+  }
 
   async function saveProfile(nextProfile: UserProfile) {
     if (!user) {
@@ -722,6 +867,11 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     }
 
     await setDoc(doc(db, `users/${user.uid}/meals`, meal.id), nextMeal, { merge: true });
+    setMealHistory((currentMeals) => mergeMealsById(currentMeals.filter((currentMeal) => currentMeal.id !== meal.id), [nextMeal]));
+    if (hasMealStatsChanged(meal, nextMeal)) {
+      await applyDailyStatsDelta(meal, -1);
+      await applyDailyStatsDelta(nextMeal, 1);
+    }
 
     if (nextPhotoAssets && meal.photo) {
       await deleteMealImages(meal.photo);
@@ -788,6 +938,11 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     }
 
     await setDoc(doc(db, `users/${user.uid}/meals`, meal.id), nextMeal, { merge: true });
+    setMealHistory((currentMeals) => mergeMealsById(currentMeals.filter((currentMeal) => currentMeal.id !== meal.id), [nextMeal]));
+    if (hasMealStatsChanged(meal, nextMeal)) {
+      await applyDailyStatsDelta(meal, -1);
+      await applyDailyStatsDelta(nextMeal, 1);
+    }
 
     if (nextMeal.favorite && nextMeal.savedFoodId) {
       await setDoc(
@@ -919,6 +1074,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     }
 
     await Promise.all(writes);
+    await applyDailyStatsDelta(mealData, 1);
 
     if (input.photoAssets) {
       uploadMealImages(user.uid, mealRef.id, input.photoAssets).then(
@@ -977,11 +1133,20 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     const savedFoodId = meal.savedFoodId ?? meal.id;
 
     if (meal.favorite) {
-      await updateDoc(mealRef, {
+      const nextMeal = {
+        ...meal,
         favorite: false,
         savedFoodId: null,
         updatedAt: new Date().toISOString(),
+      };
+      await updateDoc(mealRef, {
+        favorite: nextMeal.favorite,
+        savedFoodId: nextMeal.savedFoodId,
+        updatedAt: nextMeal.updatedAt,
       });
+      setMealHistory((currentMeals) =>
+        mergeMealsById(currentMeals.filter((currentMeal) => currentMeal.id !== meal.id), [nextMeal]),
+      );
       await deleteDoc(doc(db, `users/${user.uid}/savedFoods`, savedFoodId));
       return;
     }
@@ -1000,11 +1165,21 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       favorite: true,
     });
 
-    await updateDoc(mealRef, {
+    const nextMeal = {
+      ...meal,
       favorite: true,
       savedFoodId,
       updatedAt: new Date().toISOString(),
+    };
+
+    await updateDoc(mealRef, {
+      favorite: true,
+      savedFoodId,
+      updatedAt: nextMeal.updatedAt,
     });
+    setMealHistory((currentMeals) =>
+      mergeMealsById(currentMeals.filter((currentMeal) => currentMeal.id !== meal.id), [nextMeal]),
+    );
   }
 
   async function quickLogSavedFood(savedFood: SavedFood, multiplier: number, loggedAt?: string) {
@@ -1066,7 +1241,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     const now = new Date().toISOString();
     const mealLoggedAt = loggedAt ?? now;
 
-    await setDoc(mealRef, {
+    const mealData: MealRecord = {
       id: mealRef.id,
       source: "saved_food",
       mealTitle: estimate.mealTitle,
@@ -1087,7 +1262,10 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       savedFoodId: null,
       servings: 1,
       baseSnapshot: createMealSnapshot(estimate),
-    });
+    };
+
+    await setDoc(mealRef, mealData);
+    await applyDailyStatsDelta(mealData, 1);
 
     await updateDoc(doc(db, `users/${user.uid}/savedFoods`, savedFood.id), {
       usageCount: savedFood.usageCount + 1,
@@ -1114,6 +1292,8 @@ export function AppDataProvider({ children }: PropsWithChildren) {
     }
 
     await deleteDoc(doc(db, `users/${user.uid}/meals`, meal.id));
+    setMealHistory((currentMeals) => currentMeals.filter((currentMeal) => currentMeal.id !== meal.id));
+    await applyDailyStatsDelta(meal, -1);
     await deleteMealImages(meal.photo);
 
     if (meal.savedFoodId) {
@@ -1122,14 +1302,23 @@ export function AppDataProvider({ children }: PropsWithChildren) {
   }
 
   const syncError = useMemo(() => getAppDataSyncError(appDataErrors), [appDataErrors]);
+  const visibleDailyStats = useMemo(
+    () => mergeDailyStatsByDay(dailyStats, buildDailyStatsFromMeals(mealHistory.length ? mealHistory : meals)),
+    [dailyStats, mealHistory, meals],
+  );
 
   const value = useMemo<AppDataContextValue>(
     () => ({
       profile,
       meals,
+      mealHistory,
+      dailyStats: visibleDailyStats,
       savedFoods,
       loading,
+      mealHistoryLoading,
+      hasMoreMealHistory,
       syncError,
+      loadMoreMealHistory,
       saveProfile,
       saveThemePreference,
       saveMeal,
@@ -1139,7 +1328,7 @@ export function AppDataProvider({ children }: PropsWithChildren) {
       quickLogSavedFood,
       deleteMeal,
     }),
-    [loading, meals, profile, savedFoods, syncError],
+    [hasMoreMealHistory, loading, mealHistory, mealHistoryLoading, meals, profile, savedFoods, syncError, visibleDailyStats],
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

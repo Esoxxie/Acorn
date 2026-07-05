@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { getDailyAverage } from "../routes/TodayPage";
-import type { MealRecord } from "../../shared/models";
+import { getDailyAverage, getDailyAverageFromDailyStats } from "../routes/TodayPage";
+import type { DailyStats, MealRecord } from "../../shared/models";
 
 // Helper to create a dummy MealRecord
 function mockMeal(loggedAt: string, calories: number): MealRecord {
@@ -62,5 +62,31 @@ describe("getDailyAverage statistics helper", () => {
     // Meals = 3. Average = 1.0.
     const avg = getDailyAverage(meals, "2026-05-15", 3);
     expect(avg).toEqual({ calories: 2000, meals: 1 });
+  });
+});
+
+describe("getDailyAverageFromDailyStats statistics helper", () => {
+  function stats(dayKey: string, calories: number, mealCount = 1): DailyStats {
+    return {
+      id: dayKey,
+      dayKey,
+      mealCount,
+      calories,
+      macros: { protein: 0, carbs: 0, fat: 0, fiber: 0 },
+    };
+  }
+
+  it("uses compact daily documents instead of requiring all meal records", () => {
+    const dailyStats = [
+      stats("2026-05-10", 1000),
+      stats("2026-05-11", 1200, 3),
+      stats("2026-05-12", 0, 0),
+      stats("2026-05-13", 1800, 2),
+    ];
+
+    expect(getDailyAverageFromDailyStats(dailyStats, "2026-05-14", 3)).toEqual({
+      calories: 1333,
+      meals: 2,
+    });
   });
 });

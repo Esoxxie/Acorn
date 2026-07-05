@@ -51,8 +51,10 @@ suite("firestore rules", () => {
 
     await assertSucceeds(setDoc(doc(alice, "users/alice"), { units: "metric" }));
     await assertSucceeds(setDoc(doc(carol, "users/carol"), { units: "metric", themePreference: "system" }));
+    await assertSucceeds(setDoc(doc(alice, "users/alice/dailyStats/2026-06-02"), { dayKey: "2026-06-02", mealCount: 1 }));
     await assertFails(setDoc(doc(bob, "users/bob"), { units: "metric" }));
     await assertFails(getDoc(doc(bob, "users/alice")));
+    await assertFails(getDoc(doc(bob, "users/alice/dailyStats/2026-06-02")));
     await assertFails(getDoc(doc(alice, "allowedUsers/alice")));
   });
 

@@ -13,7 +13,11 @@ import "../styles/meal-surfaces.css";
 export function LibraryPage() {
   const {
     meals,
+    mealHistory,
+    mealHistoryLoading,
+    hasMoreMealHistory,
     savedFoods,
+    loadMoreMealHistory,
     quickLogSavedFood,
     saveMeal,
     toggleMealFavorite,
@@ -25,7 +29,8 @@ export function LibraryPage() {
   const [expandedMealId, setExpandedMealId] = useState<string | null>(null);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const searchLower = search.toLowerCase();
-  const visibleMeals = meals.filter((meal) => {
+  const historyMeals = mealHistory.length ? mealHistory : meals;
+  const visibleMeals = historyMeals.filter((meal) => {
     return (
       !searchLower ||
       meal.mealTitle.toLowerCase().includes(searchLower) ||
@@ -152,6 +157,20 @@ export function LibraryPage() {
             </div>
           </section>
         ))}
+        {visibleMeals.length || hasMoreMealHistory ? (
+          <button
+            className="secondary-button library-load-more"
+            disabled={mealHistoryLoading || !hasMoreMealHistory}
+            onClick={() => void loadMoreMealHistory()}
+            type="button"
+          >
+            {mealHistoryLoading
+              ? uiCopy.library.loadingOlder
+              : hasMoreMealHistory
+                ? uiCopy.library.loadOlder
+                : uiCopy.library.endOfHistory}
+          </button>
+        ) : null}
       </div>
     </div>
   );
