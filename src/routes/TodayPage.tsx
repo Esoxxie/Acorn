@@ -4,13 +4,13 @@ import { useAppData } from "../app/contexts";
 import { BottomSheet } from "../components/BottomSheet";
 import { MealCard } from "../components/MealCard";
 import { DailySummaryCard, MacroSummaryCard } from "../components/NutritionVisuals";
-import type { MacroSnapshot, MealEstimate, MealRecord } from "../../shared/models";
+import type { DailyStats, MacroSnapshot, MealEstimate, MealRecord } from "../../shared/models";
 import { useLogFlow } from "../features/log/LogFlow";
 import { uiCopy } from "../lib/copy";
 import { formatCalories, formatDateLabel } from "../lib/format";
 import { addDaysToLocalDayKey, createTimestampForLocalDay, getLocalDayKey } from "../../shared/date";
 import { getFoodIcon } from "../lib/food-icons";
-import { getWinStreakDays } from "../lib/win-streak";
+import { getWinStreakDays, getWinStreakDaysFromDailyStats } from "../lib/win-streak";
 
 function sumMacros(meals: Array<{ macros: MacroSnapshot }>): MacroSnapshot {
   return meals.reduce(
@@ -61,6 +61,25 @@ export function getDailyAverage(meals: MealRecord[], selectedDayKey: string, day
   };
 }
 
+export function getDailyAverageFromDailyStats(dailyStats: DailyStats[], selectedDayKey: string, daysLimit: number) {
+  const activeDaysInRange = dailyStats
+    .filter((stats) => stats.dayKey < selectedDayKey && stats.mealCount > 0)
+    .sort((a, b) => b.dayKey.localeCompare(a.dayKey))
+    .slice(0, daysLimit);
+
+  if (activeDaysInRange.length === 0) {
+    return { calories: 0, meals: 0 };
+  }
+
+  const totalCalories = activeDaysInRange.reduce((sum, stats) => sum + stats.calories, 0);
+  const totalMeals = activeDaysInRange.reduce((sum, stats) => sum + stats.mealCount, 0);
+
+  return {
+    calories: Math.round(totalCalories / activeDaysInRange.length),
+    meals: Math.round((totalMeals / activeDaysInRange.length) * 10) / 10,
+  };
+}
+
 function getDailySeries(meals: MealRecord[], selectedDayKey: string, days: number) {
   return Array.from({ length: days }, (_, index) => {
     const dayKey = addDaysToLocalDayKey(selectedDayKey, index - days + 1);
@@ -70,6 +89,21 @@ function getDailySeries(meals: MealRecord[], selectedDayKey: string, days: numbe
       calories: dayMeals.reduce((sum, meal) => sum + meal.calories, 0),
       dayKey,
       meals: dayMeals.length,
+    };
+  });
+}
+
+function getDailySeriesFromDailyStats(dailyStats: DailyStats[], selectedDayKey: string, days: number) {
+  const statsByDay = new Map(dailyStats.map((stats) => [stats.dayKey, stats]));
+
+  return Array.from({ length: days }, (_, index) => {
+    const dayKey = addDaysToLocalDayKey(selectedDayKey, index - days + 1);
+    const stats = statsByDay.get(dayKey);
+
+    return {
+      calories: stats?.calories ?? 0,
+      dayKey,
+      meals: stats?.mealCount ?? 0,
     };
   });
 }
@@ -100,6 +134,7 @@ export function TodayPage() {
   const {
     profile,
     meals,
+    dailyStats,
     savedFoods,
     quickLogSavedFood,
     saveMeal,
@@ -114,10 +149,22 @@ export function TodayPage() {
   const selectedMeals = useMemo(() => getMealsForDay(meals, selectedDayKey), [meals, selectedDayKey]);
   const selectedCalories = selectedMeals.reduce((sum, meal) => sum + meal.calories, 0);
   const selectedMacros = sumMacros(selectedMeals);
-  const weeklyAverage = useMemo(() => getDailyAverage(meals, selectedDayKey, 7), [meals, selectedDayKey]);
-  const monthlyAverage = useMemo(() => getDailyAverage(meals, selectedDayKey, 30), [meals, selectedDayKey]);
-  const winStreakDays = useMemo(() => getWinStreakDays(meals, selectedDayKey), [meals, selectedDayKey]);
-  const chartSeries = useMemo(() => getDailySeries(meals, selectedDayKey, 30), [meals, selectedDayKey]);
+  const weeklyAverage = useMemo(
+    () => dailyStats.length ? getDailyAverageFromDailyStats(dailyStats, selectedDayKey, 7) : getDailyAverage(meals, selectedDayKey, 7),
+    [dailyStats, meals, selectedDayKey],
+  );
+  const monthlyAverage = useMemo(
+    () => dailyStats.length ? getDailyAverageFromDailyStats(dailyStats, selectedDayKey, 30) : getDailyAverage(meals, selectedDayKey, 30),
+    [dailyStats, meals, selectedDayKey],
+  );
+  const winStreakDays = useMemo(
+    () => dailyStats.length ? getWinStreakDaysFromDailyStats(dailyStats, selectedDayKey) : getWinStreakDays(meals, selectedDayKey),
+    [dailyStats, meals, selectedDayKey],
+  );
+  const chartSeries = useMemo(
+    () => dailyStats.length ? getDailySeriesFromDailyStats(dailyStats, selectedDayKey, 30) : getDailySeries(meals, selectedDayKey, 30),
+    [dailyStats, meals, selectedDayKey],
+  );
   const chartMaxCalories = Math.max(1, ...chartSeries.map((day) => day.calories));
   const dailySpend = profile?.goalMode === "manual"
     ? (profile.manualCalorieGoal ?? profile.dailySpendKcal ?? null)

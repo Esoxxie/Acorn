@@ -1,4 +1,4 @@
-import type { MealRecord } from "../../shared/models";
+import type { DailyStats, MealRecord } from "../../shared/models";
 import { addDaysToLocalDayKey, getLocalDayKey } from "../../shared/date";
 
 export type WinStreakStage = {
@@ -28,6 +28,15 @@ export const WIN_STREAK_STAGES: WinStreakStage[] = [
 
 export function getWinStreakDays(meals: MealRecord[], selectedDayKey: string) {
   const activeDays = new Set(meals.map((meal) => getLocalDayKey(meal.loggedAt)));
+  return getWinStreakDaysFromActiveDays(activeDays, selectedDayKey);
+}
+
+export function getWinStreakDaysFromDailyStats(dailyStats: DailyStats[], selectedDayKey: string) {
+  const activeDays = new Set(dailyStats.filter((stats) => stats.mealCount > 0).map((stats) => stats.dayKey));
+  return getWinStreakDaysFromActiveDays(activeDays, selectedDayKey);
+}
+
+function getWinStreakDaysFromActiveDays(activeDays: Set<string>, selectedDayKey: string) {
   let cursor = activeDays.has(selectedDayKey) ? selectedDayKey : addDaysToLocalDayKey(selectedDayKey, -1);
   let streakDays = 0;
 

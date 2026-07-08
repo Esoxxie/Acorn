@@ -43,6 +43,9 @@ export const uiCopy = {
   library: {
     heading: "Bibliothek",
     searchPlaceholder: "Einträge suchen",
+    loadOlder: "Ältere laden",
+    loadingOlder: "Lade...",
+    endOfHistory: "Alle geladen",
     emptyFavorites: "Noch keine Favoriten.",
     usedCount: (count: number) => `${count}x genutzt`,
   },

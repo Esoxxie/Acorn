@@ -3,9 +3,11 @@ import {
   type AuthError,
   GoogleAuthProvider,
   connectAuthEmulator,
+  getRedirectResult,
   getAuth,
   signInAnonymously,
   signInWithPopup,
+  signInWithRedirect,
 } from "firebase/auth";
 import {
   type Firestore,
@@ -55,8 +57,33 @@ export { auth, firestore as db, functions, googleProvider, storage };
 
 export const analyzeEntry = httpsCallable<AnalyzeEntryInput, MealEstimate>(functions, "analyzeEntry");
 
+function shouldUseRedirectSignIn() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (typeof navigator === "object" &&
+      "standalone" in navigator &&
+      Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
+  const isCoarseMobile = window.matchMedia("(pointer: coarse)").matches && window.innerWidth <= 900;
+  const isMobileUserAgent = /Android|iPhone|iPad|iPod/i.test(window.navigator.userAgent);
+
+  return isStandalone || isCoarseMobile || isMobileUserAgent;
+}
+
 export async function startGoogleSignIn() {
+  if (shouldUseRedirectSignIn()) {
+    await signInWithRedirect(auth, googleProvider);
+    return;
+  }
+
   await signInWithPopup(auth, googleProvider);
+}
+
+export async function finishRedirectSignIn() {
+  await getRedirectResult(auth);
 }
 
 export async function startDemoSignIn() {
